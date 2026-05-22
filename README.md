@@ -30,3 +30,28 @@ GET  /health
 GET  /api/profile
 POST /api/chat
 GET  /swagger-ui
+
+```
+
+## Tech Stack
+
+```text
+Frontend: React, TypeScript, Vite
+Backend: Rust, Axum, Tokio
+AI: Hugging Face Router
+Docs: Swagger UI / utoipa
+Deployment: Docker, GitHub Actions, Hugging Face Spaces
+```
+
+## Environment Variables
+
+```text
+PORT
+HF_API_TOKEN
+HF_MODEL_ID
+PORTFOLIO_PROFILE_JSON
+```
+
+## Status
+
+The backend, frontend, AI chatbot, Docker build, and Hugging Face deployment are currently working.
