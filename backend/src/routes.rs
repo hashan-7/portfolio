@@ -2,6 +2,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use chatbot_ml::chatbot::client::AiClient;
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
@@ -42,12 +43,9 @@ async fn health_check() -> &'static str {
     responses((status = 200, description = "Chatbot response successfully generated", body = ChatResponse))
 )]
 async fn chat_handler(Json(payload): Json<ChatRequest>) -> Json<ChatResponse> {
-    Json(ChatResponse {
-        reply: format!(
-            "You said: '{}'. The AI chatbot is currently under development.",
-            payload.message
-        ),
-    })
+    let reply = AiClient::get_reply(&payload.message).await;
+
+    Json(ChatResponse { reply })
 }
 
 pub fn create_router() -> Router {
