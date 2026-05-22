@@ -6,7 +6,10 @@ use axum::{
 use chatbot_ml::chatbot::client::{AiClient, ChatMessage as MlChatMessage};
 use serde::{Deserialize, Serialize};
 use std::env;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::{
+    cors::{Any, CorsLayer},
+    services::{ServeDir, ServeFile},
+};
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -185,10 +188,14 @@ pub fn create_router() -> Router {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    let frontend_serve_dir =
+        ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html"));
+
     Router::new()
         .route("/health", get(health_check))
         .route("/api/profile", get(profile_handler))
         .route("/api/chat", post(chat_handler))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .fallback_service(frontend_serve_dir)
         .layer(cors)
 }
