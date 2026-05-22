@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import './App.css';
+import Chatbot from './components/Chatbot';
 import Profile from './components/Profile';
 import { getProfile } from './services/api';
 import type { Profile as ProfileData } from './types';
@@ -22,19 +23,37 @@ function App() {
       });
   }, []);
 
-  if (isLoading) {
-    return <div className="state-message">Loading portfolio...</div>;
-  }
+  const renderProfile = () => {
+    if (isLoading) {
+      return <div className="state-message">Loading portfolio...</div>;
+    }
 
-  if (errorMessage) {
-    return <div className="state-message error">{errorMessage}</div>;
-  }
+    if (errorMessage) {
+      return <div className="state-message error">{errorMessage}</div>;
+    }
 
-  if (!profile) {
-    return <div className="state-message error">Profile data is not available.</div>;
-  }
+    if (!profile) {
+      return <div className="state-message error">Profile data is not available.</div>;
+    }
 
-  return <Profile profile={profile} />;
+    return <Profile profile={profile} />;
+  };
+
+  return (
+    <div className="app-container">
+      <header className="site-header">
+        <h1>AI Portfolio</h1>
+        <p>Stitching intelligence into every line of code.</p>
+      </header>
+
+      <div className="content-grid">
+        <div>{renderProfile()}</div>
+        <aside className="chat-section">
+          <Chatbot />
+        </aside>
+      </div>
+    </div>
+  );
 }
 
 export default App;

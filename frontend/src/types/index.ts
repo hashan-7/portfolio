@@ -28,3 +28,8 @@ export interface Profile {
   certificates?: Certificate[];
   social_links?: SocialLinks;
 }
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}

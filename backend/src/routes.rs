@@ -3,7 +3,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use chatbot_ml::chatbot::client::AiClient;
+use chatbot_ml::chatbot::client::{AiClient, ChatMessage as MlChatMessage};
 use serde::{Deserialize, Serialize};
 use std::env;
 use tower_http::cors::{Any, CorsLayer};
@@ -84,9 +84,15 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+#[derive(Serialize, Deserialize, ToSchema)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
+
 #[derive(Deserialize, ToSchema)]
 pub struct ChatRequest {
-    pub message: String,
+    pub history: Vec<ChatMessage>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -100,6 +106,7 @@ pub struct ChatResponse {
     components(schemas(
         ChatRequest,
         ChatResponse,
+        ChatMessage,
         ProfileResponse,
         Project,
         Certificate,
@@ -128,7 +135,16 @@ async fn health_check() -> &'static str {
     responses((status = 200, description = "Chatbot response successfully generated", body = ChatResponse))
 )]
 async fn chat_handler(Json(payload): Json<ChatRequest>) -> Json<ChatResponse> {
-    let reply = AiClient::get_reply(&payload.message).await;
+    let history = payload
+        .history
+        .into_iter()
+        .map(|message| MlChatMessage {
+            role: message.role,
+            content: message.content,
+        })
+        .collect::<Vec<_>>();
+
+    let reply = AiClient::get_reply(&history).await;
 
     Json(ChatResponse { reply })
 }

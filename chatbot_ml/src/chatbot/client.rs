@@ -1,12 +1,19 @@
 use super::prompt::build_system_prompt;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{env, time::Duration};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ChatMessage {
+    pub role: String,
+    pub content: String,
+}
 
 pub struct AiClient;
 
 impl AiClient {
-    pub async fn get_reply(user_message: &str) -> String {
+    pub async fn get_reply(history: &[ChatMessage]) -> String {
         let system_prompt = build_system_prompt();
 
         let hf_token = match env::var("HF_API_TOKEN") {
@@ -34,20 +41,29 @@ impl AiClient {
             Err(error) => return format!("[Error] Failed to create HTTP client: {}", error),
         };
 
+        let mut api_messages = vec![json!({
+            "role": "system",
+            "content": system_prompt
+        })];
+
+        let sanitized_history = sanitize_history(history);
+
+        if sanitized_history.is_empty() {
+            return "[Error] Chat history is empty.".to_string();
+        }
+
+        for message in sanitized_history {
+            api_messages.push(json!({
+                "role": message.role,
+                "content": message.content
+            }));
+        }
+
         let payload = json!({
             "model": hf_model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
-                {
-                    "role": "user",
-                    "content": user_message
-                }
-            ],
-            "max_tokens": 200,
-            "temperature": 0.7
+            "messages": api_messages,
+            "max_tokens": 250,
+            "temperature": 0.4
         });
 
         let response = match client
@@ -80,6 +96,30 @@ impl AiClient {
         extract_chat_message(&response_json)
             .unwrap_or_else(|| "[Error] Unexpected response format from AI model.".to_string())
     }
+}
+
+fn sanitize_history(history: &[ChatMessage]) -> Vec<ChatMessage> {
+    history
+        .iter()
+        .filter_map(|message| {
+            let role = message.role.trim();
+            let content = message.content.trim();
+
+            if content.is_empty() || !matches!(role, "user" | "assistant") {
+                return None;
+            }
+
+            Some(ChatMessage {
+                role: role.to_string(),
+                content: content.to_string(),
+            })
+        })
+        .rev()
+        .take(12)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect()
 }
 
 fn extract_chat_message(value: &Value) -> Option<String> {
