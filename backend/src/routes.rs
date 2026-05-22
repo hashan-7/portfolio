@@ -6,6 +6,7 @@ use axum::{
 use chatbot_ml::chatbot::client::AiClient;
 use serde::{Deserialize, Serialize};
 use std::env;
+use tower_http::cors::{Any, CorsLayer};
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -163,9 +164,15 @@ async fn profile_handler() -> Result<Json<ProfileResponse>, (StatusCode, Json<Er
 }
 
 pub fn create_router() -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
+
     Router::new()
         .route("/health", get(health_check))
         .route("/api/profile", get(profile_handler))
         .route("/api/chat", post(chat_handler))
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+        .layer(cors)
 }
