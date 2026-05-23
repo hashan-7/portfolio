@@ -1,7 +1,7 @@
 use super::prompt::build_system_prompt;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{env, time::Duration};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -13,8 +13,8 @@ pub struct ChatMessage {
 pub struct AiClient;
 
 impl AiClient {
-    pub async fn get_reply(history: &[ChatMessage]) -> String {
-        let system_prompt = build_system_prompt();
+    pub async fn get_reply(history: &[ChatMessage], profile_json: &str) -> String {
+        let system_prompt = build_system_prompt(profile_json);
 
         let hf_token = match env::var("HF_API_TOKEN") {
             Ok(token) if !token.trim().is_empty() => token,
@@ -41,16 +41,16 @@ impl AiClient {
             Err(error) => return format!("[Error] Failed to create HTTP client: {}", error),
         };
 
-        let mut api_messages = vec![json!({
-            "role": "system",
-            "content": system_prompt
-        })];
-
         let sanitized_history = sanitize_history(history);
 
         if sanitized_history.is_empty() {
             return "[Error] Chat history is empty.".to_string();
         }
+
+        let mut api_messages = vec![json!({
+            "role": "system",
+            "content": system_prompt
+        })];
 
         for message in sanitized_history {
             api_messages.push(json!({
@@ -62,8 +62,8 @@ impl AiClient {
         let payload = json!({
             "model": hf_model,
             "messages": api_messages,
-            "max_tokens": 250,
-            "temperature": 0.4
+            "max_tokens": 300,
+            "temperature": 0.35
         });
 
         let response = match client

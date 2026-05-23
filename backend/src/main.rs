@@ -1,6 +1,11 @@
 use std::{env, net::SocketAddr};
 
-mod routes;
+pub mod admin;
+pub mod auth;
+pub mod media;
+pub mod profile;
+pub mod routes;
+pub mod storage;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

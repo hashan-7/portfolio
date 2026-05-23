@@ -6,9 +6,26 @@
 .env.*
 !.env.example
 
+# Local persistent storage / uploads
+/data/
+/backend/data/
+/frontend/data/
+test.png
+test.jpg
+test.jpeg
+test.webp
+test.mp4
+
 # Frontend
 /frontend/node_modules/
 /frontend/dist/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # IDE
 .vscode/

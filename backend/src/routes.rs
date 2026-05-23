@@ -1,11 +1,11 @@
 use axum::{
-    http::StatusCode,
-    routing::{get, post},
     Json, Router,
+    http::StatusCode,
+    middleware,
+    routing::{get, post},
 };
 use chatbot_ml::chatbot::client::{AiClient, ChatMessage as MlChatMessage};
 use serde::{Deserialize, Serialize};
-use std::env;
 use tower_http::{
     cors::{Any, CorsLayer},
     services::{ServeDir, ServeFile},
@@ -13,74 +13,16 @@ use tower_http::{
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
-#[derive(Serialize, Deserialize, ToSchema)]
-pub struct Project {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub tech_stack: Vec<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub link: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, ToSchema)]
-pub struct Certificate {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub issuer: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub year: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub link: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, ToSchema)]
-pub struct SocialLinks {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub github: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub linkedin: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub website: Option<String>,
-}
-
-#[derive(Serialize, Deserialize, ToSchema)]
-pub struct ProfileResponse {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub name: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub role: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub bio: Option<String>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub skills: Vec<String>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub projects: Vec<Project>,
-
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub certificates: Vec<Certificate>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub social_links: Option<SocialLinks>,
-}
+use crate::{
+    admin::{
+        get_admin_profile_handler, login_handler, update_admin_profile_handler,
+        upload_media_handler,
+    },
+    auth::auth_middleware,
+    media,
+    profile::{Certificate, Education, PublicProfile, PublicProject, SocialLinks},
+    storage,
+};
 
 #[derive(Serialize, ToSchema)]
 pub struct ErrorResponse {
@@ -110,10 +52,11 @@ pub struct ChatResponse {
         ChatRequest,
         ChatResponse,
         ChatMessage,
-        ProfileResponse,
-        Project,
+        PublicProfile,
+        PublicProject,
         Certificate,
         SocialLinks,
+        Education,
         ErrorResponse
     )),
     tags((name = "Portfolio API", description = "Backend routes for AI Portfolio"))
@@ -147,7 +90,16 @@ async fn chat_handler(Json(payload): Json<ChatRequest>) -> Json<ChatResponse> {
         })
         .collect::<Vec<_>>();
 
-    let reply = AiClient::get_reply(&history).await;
+    let profile_json = match storage::load_profile_json() {
+        Ok(profile_json) => profile_json,
+        Err(error) => {
+            return Json(ChatResponse {
+                reply: format!("[Error] Failed to load portfolio context: {}", error),
+            });
+        }
+    };
+
+    let reply = AiClient::get_reply(&history, &profile_json).await;
 
     Json(ChatResponse { reply })
 }
@@ -157,29 +109,35 @@ async fn chat_handler(Json(payload): Json<ChatRequest>) -> Json<ChatResponse> {
     path = "/api/profile",
     tag = "Portfolio API",
     responses(
-        (status = 200, description = "Public profile data retrieved successfully", body = ProfileResponse),
-        (status = 404, description = "Profile data not found", body = ErrorResponse),
-        (status = 500, description = "Failed to parse profile data", body = ErrorResponse)
+        (status = 200, description = "Public profile data retrieved successfully", body = PublicProfile),
+        (status = 500, description = "Failed to load profile data", body = ErrorResponse)
     )
 )]
-async fn profile_handler() -> Result<Json<ProfileResponse>, (StatusCode, Json<ErrorResponse>)> {
-    let profile_json = env::var("PORTFOLIO_PROFILE_JSON").map_err(|_| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(ErrorResponse {
-                error: "Profile data is not configured.".to_string(),
-            }),
-        )
-    })?;
+async fn profile_handler() -> Result<Json<PublicProfile>, (StatusCode, Json<ErrorResponse>)> {
+    storage::load_profile()
+        .map(|full_profile| Json(full_profile.into()))
+        .map_err(|error| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: format!("Failed to load profile data: {}", error),
+                }),
+            )
+        })
+}
 
-    serde_json::from_str::<ProfileResponse>(&profile_json).map(Json).map_err(|error| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(ErrorResponse {
-                error: format!("Failed to parse profile data: {}", error),
-            }),
+fn admin_routes() -> Router {
+    let protected_routes = Router::new()
+        .route(
+            "/profile",
+            get(get_admin_profile_handler).put(update_admin_profile_handler),
         )
-    })
+        .route("/media/upload", post(upload_media_handler))
+        .route_layer(middleware::from_fn(auth_middleware));
+
+    Router::new()
+        .route("/login", post(login_handler))
+        .merge(protected_routes)
 }
 
 pub fn create_router() -> Router {
@@ -195,6 +153,8 @@ pub fn create_router() -> Router {
         .route("/health", get(health_check))
         .route("/api/profile", get(profile_handler))
         .route("/api/chat", post(chat_handler))
+        .nest("/api/admin", admin_routes())
+        .merge(media::create_media_router())
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .fallback_service(frontend_serve_dir)
         .layer(cors)
