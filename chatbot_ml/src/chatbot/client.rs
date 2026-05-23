@@ -13,8 +13,13 @@ pub struct ChatMessage {
 pub struct AiClient;
 
 impl AiClient {
-    pub async fn get_reply(history: &[ChatMessage], profile_json: &str) -> String {
-        let system_prompt = build_system_prompt(profile_json);
+    pub async fn get_reply(
+        history: &[ChatMessage],
+        profile_context_json: &str,
+        scope_key: &str,
+        scope_label: &str,
+    ) -> String {
+        let system_prompt = build_system_prompt(profile_context_json, scope_key, scope_label);
 
         let hf_token = match env::var("HF_API_TOKEN") {
             Ok(token) if !token.trim().is_empty() => token,
@@ -62,8 +67,8 @@ impl AiClient {
         let payload = json!({
             "model": hf_model,
             "messages": api_messages,
-            "max_tokens": 300,
-            "temperature": 0.35
+            "max_tokens": 900,
+            "temperature": 0.2
         });
 
         let response = match client
@@ -94,6 +99,7 @@ impl AiClient {
         }
 
         extract_chat_message(&response_json)
+            .map(clean_model_reply)
             .unwrap_or_else(|| "[Error] Unexpected response format from AI model.".to_string())
     }
 }
@@ -145,4 +151,29 @@ fn extract_error_message(value: &Value) -> Option<String> {
                 .and_then(Value::as_str)
                 .map(|message| format!("[Error] Hugging Face Router error: {}", message))
         })
+}
+
+fn clean_model_reply(text: String) -> String {
+    let cleaned_lines = text.lines().map(clean_line).collect::<Vec<_>>().join("\n");
+
+    cleaned_lines
+        .replace("**", "")
+        .replace("__", "")
+        .replace("###", "")
+        .replace("##", "")
+        .replace('#', "")
+        .trim()
+        .to_string()
+}
+
+fn clean_line(line: &str) -> String {
+    let trimmed = line.trim();
+
+    let without_bullet = trimmed
+        .strip_prefix("- ")
+        .or_else(|| trimmed.strip_prefix("* "))
+        .or_else(|| trimmed.strip_prefix("• "))
+        .unwrap_or(trimmed);
+
+    without_bullet.trim().to_string()
 }

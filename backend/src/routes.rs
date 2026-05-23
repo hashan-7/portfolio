@@ -16,12 +16,12 @@ use utoipa_swagger_ui::SwaggerUi;
 use crate::{
     admin::{
         get_admin_profile_handler, login_handler, update_admin_profile_handler,
-        upload_media_handler,
+        upload_media_handler, verify_admin_handler,
     },
     auth::auth_middleware,
     media,
-    profile::{Certificate, Education, PublicProfile, PublicProject, SocialLinks},
-    storage,
+    profile::{Certificate, ChatScope, Education, PublicProfile, PublicProject, SocialLinks},
+    safety, storage,
 };
 
 #[derive(Serialize, ToSchema)]
@@ -38,11 +38,14 @@ pub struct ChatMessage {
 #[derive(Deserialize, ToSchema)]
 pub struct ChatRequest {
     pub history: Vec<ChatMessage>,
+    #[serde(default)]
+    pub scope: ChatScope,
 }
 
 #[derive(Serialize, ToSchema)]
 pub struct ChatResponse {
     pub reply: String,
+    pub scope: ChatScope,
 }
 
 #[derive(OpenApi)]
@@ -52,6 +55,7 @@ pub struct ChatResponse {
         ChatRequest,
         ChatResponse,
         ChatMessage,
+        ChatScope,
         PublicProfile,
         PublicProject,
         Certificate,
@@ -81,6 +85,8 @@ async fn health_check() -> &'static str {
     responses((status = 200, description = "Chatbot response successfully generated", body = ChatResponse))
 )]
 async fn chat_handler(Json(payload): Json<ChatRequest>) -> Json<ChatResponse> {
+    let scope = payload.scope;
+
     let history = payload
         .history
         .into_iter()
@@ -90,18 +96,29 @@ async fn chat_handler(Json(payload): Json<ChatRequest>) -> Json<ChatResponse> {
         })
         .collect::<Vec<_>>();
 
-    let profile_json = match storage::load_profile_json() {
-        Ok(profile_json) => profile_json,
+    if let Some(reply) = safety::get_safety_reply(&history) {
+        return Json(ChatResponse { reply, scope });
+    }
+
+    let profile_context = match storage::load_chatbot_context_json(scope) {
+        Ok(profile_context) => profile_context,
         Err(error) => {
             return Json(ChatResponse {
                 reply: format!("[Error] Failed to load portfolio context: {}", error),
+                scope,
             });
         }
     };
 
-    let reply = AiClient::get_reply(&history, &profile_json).await;
+    let reply = AiClient::get_reply(
+        &history,
+        &profile_context,
+        scope.as_prompt_label(),
+        scope.as_display_label(),
+    )
+    .await;
 
-    Json(ChatResponse { reply })
+    Json(ChatResponse { reply, scope })
 }
 
 #[utoipa::path(
@@ -128,6 +145,7 @@ async fn profile_handler() -> Result<Json<PublicProfile>, (StatusCode, Json<Erro
 
 fn admin_routes() -> Router {
     let protected_routes = Router::new()
+        .route("/verify", get(verify_admin_handler))
         .route(
             "/profile",
             get(get_admin_profile_handler).put(update_admin_profile_handler),

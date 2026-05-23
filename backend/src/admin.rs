@@ -1,5 +1,5 @@
 use axum::{Json, extract::Multipart, http::StatusCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{env, path::PathBuf};
 use tokio::{fs, io::AsyncWriteExt};
 
@@ -15,6 +15,11 @@ const MAX_UPLOAD_SIZE_BYTES: usize = 25 * 1024 * 1024;
 pub struct LoginRequest {
     pub email: String,
     pub password: String,
+}
+
+#[derive(Serialize)]
+pub struct AdminStatusResponse {
+    pub authenticated: bool,
 }
 
 pub async fn login_handler(
@@ -44,6 +49,12 @@ pub async fn login_handler(
     generate_token(&admin_email)
         .map(|token| Json(AuthResponse { token }))
         .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
+}
+
+pub async fn verify_admin_handler() -> Json<AdminStatusResponse> {
+    Json(AdminStatusResponse {
+        authenticated: true,
+    })
 }
 
 pub async fn get_admin_profile_handler() -> Result<Json<FullProfile>, (StatusCode, String)> {

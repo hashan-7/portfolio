@@ -41,6 +41,7 @@ GET  /swagger-ui
 
 ```text
 POST /api/admin/login
+GET  /api/admin/verify
 GET  /api/admin/profile
 PUT  /api/admin/profile
 POST /api/admin/media/upload
@@ -106,3 +107,4 @@ For local development, the app falls back to:
 ## Status
 
 The backend, frontend, AI chatbot, admin authentication, media upload, Docker build, and Hugging Face deployment foundation are currently working.
+

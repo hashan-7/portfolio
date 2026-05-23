@@ -5,6 +5,7 @@ pub mod auth;
 pub mod media;
 pub mod profile;
 pub mod routes;
+pub mod safety;
 pub mod storage;
 
 #[tokio::main]

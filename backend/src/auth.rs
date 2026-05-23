@@ -59,6 +59,20 @@ pub fn generate_token(email: &str) -> Result<String, AuthError> {
     })
 }
 
+pub fn verify_token(token: &str) -> Result<Claims, AuthError> {
+    let secret = session_secret()?;
+
+    decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(secret.as_bytes()),
+        &Validation::default(),
+    )
+    .map(|data| data.claims)
+    .map_err(|_| AuthError {
+        error: "Invalid or expired token.".to_string(),
+    })
+}
+
 pub async fn auth_middleware(
     req: Request,
     next: axum::middleware::Next,
@@ -85,21 +99,14 @@ pub async fn auth_middleware(
         )
     })?;
 
-    let secret =
-        session_secret().map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, Json(error)))?;
+    verify_token(token).map_err(|error| {
+        let status = if error.error.contains("ADMIN_SESSION_SECRET") {
+            StatusCode::INTERNAL_SERVER_ERROR
+        } else {
+            StatusCode::UNAUTHORIZED
+        };
 
-    decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &Validation::default(),
-    )
-    .map_err(|_| {
-        (
-            StatusCode::UNAUTHORIZED,
-            Json(AuthError {
-                error: "Invalid or expired token.".to_string(),
-            }),
-        )
+        (status, Json(error))
     })?;
 
     Ok(next.run(req).await)
