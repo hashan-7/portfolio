@@ -310,4 +310,203 @@
   .chatbot-form button {
     width: 100%;
   }
+ 
+}
+
+.admin-page {
+  width: min(1100px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 48px 0;
+}
+
+.admin-card {
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--surface);
+  padding: 32px;
+}
+
+.admin-login-card {
+  width: min(520px, 100%);
+  margin: 60px auto;
+}
+
+.admin-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.admin-card h1,
+.admin-card h2 {
+  color: var(--heading);
+  margin: 0 0 12px;
+}
+
+.admin-muted {
+  color: var(--text);
+  margin: 0 0 16px;
+}
+
+.admin-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.admin-form label,
+.admin-section label {
+  display: grid;
+  gap: 8px;
+  color: var(--heading);
+  font-weight: 600;
+}
+
+.admin-form input,
+.admin-section input,
+.admin-json-editor {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--heading);
+  padding: 12px 14px;
+  outline: none;
+}
+
+.admin-json-editor {
+  min-height: 520px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-form button,
+.admin-actions button,
+.admin-secondary-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: var(--accent);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.admin-secondary-button {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--heading);
+}
+
+.admin-form button:disabled,
+.admin-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.admin-section {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.admin-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+.admin-stats div {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg);
+  padding: 16px;
+}
+
+.admin-stats span {
+  display: block;
+  color: var(--text);
+  font-size: 14px;
+}
+
+.admin-stats strong {
+  display: block;
+  color: var(--heading);
+  font-size: 22px;
+  margin-top: 6px;
+}
+
+.admin-error {
+  color: #ef4444;
+}
+
+.admin-success {
+  color: #22c55e;
+}
+
+.profile-location {
+  margin-top: 16px;
+  color: var(--text);
+}
+
+.chat-message a {
+  color: var(--accent);
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .admin-card {
+    padding: 24px;
+  }
+
+  .admin-topbar {
+    flex-direction: column;
+  }
+
+  .admin-actions {
+    flex-direction: column;
+  }
+}
+
+.admin-json-editor.compact {
+  min-height: 120px;
+}
+
+.admin-form select {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  color: var(--heading);
+  padding: 12px 14px;
+  outline: none;
+}
+
+.admin-checkbox-row {
+  display: flex !important;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-checkbox-row input {
+  width: auto;
+}
+
+.admin-nested-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--bg);
+  padding: 18px;
 }

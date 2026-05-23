@@ -1,20 +1,22 @@
 import { useEffect, useState } from 'react';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import './App.css';
+import AdminDashboard from './components/admin/AdminDashboard';
+import AdminLogin from './components/admin/AdminLogin';
 import Chatbot from './components/Chatbot';
+import ProtectedAdmin from './components/common/ProtectedAdmin';
 import Profile from './components/Profile';
 import { getProfile } from './services/api';
-import type { Profile as ProfileData } from './types';
+import type { PublicProfile } from './types';
 
-function App() {
-  const [profile, setProfile] = useState<ProfileData | null>(null);
+function PortfolioHome() {
+  const [profile, setProfile] = useState<PublicProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     getProfile()
-      .then((data) => {
-        setProfile(data);
-      })
+      .then(setProfile)
       .catch((error: unknown) => {
         setErrorMessage(error instanceof Error ? error.message : 'Failed to load profile data.');
       })
@@ -53,6 +55,21 @@ function App() {
         </aside>
       </div>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<PortfolioHome />} />
+        <Route path="/h7-admin" element={<AdminLogin />} />
+        <Route element={<ProtectedAdmin />}>
+          <Route path="/h7-admin/dashboard" element={<AdminDashboard />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 

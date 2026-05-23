@@ -1,5 +1,6 @@
 # Rust
 /target/
+target/
 
 # Environment / Secrets
 .env
@@ -7,6 +8,7 @@
 !.env.example
 
 # Local persistent storage / uploads
+data/
 /data/
 /backend/data/
 /frontend/data/

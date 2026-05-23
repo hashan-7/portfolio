@@ -2,6 +2,23 @@ import { useState } from 'react';
 import { sendChatMessage } from '../services/api';
 import type { ChatMessage } from '../types';
 
+function renderMessageContent(content: string) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = content.split(urlRegex);
+
+  return parts.map((part, index) => {
+    if (part.match(urlRegex)) {
+      return (
+        <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer">
+          {part}
+        </a>
+      );
+    }
+
+    return <span key={`${part}-${index}`}>{part}</span>;
+  });
+}
+
 function Chatbot() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
@@ -16,10 +33,7 @@ function Chatbot() {
       return;
     }
 
-    const updatedHistory: ChatMessage[] = [
-      ...messages,
-      { role: 'user', content: userMessage },
-    ];
+    const updatedHistory: ChatMessage[] = [...messages, { role: 'user', content: userMessage }];
 
     setMessages(updatedHistory);
     setInput('');
@@ -55,14 +69,14 @@ function Chatbot() {
       <div className="chatbot-messages">
         {messages.length === 0 && (
           <p className="chatbot-placeholder">
-            Ask me about Hashan&apos;s skills, projects, certificates, or experience.
+            Ask me about Chamira&apos;s skills, projects, certificates, or education.
           </p>
         )}
 
         {messages.map((message, index) => (
           <div className={`chat-message ${message.role}`} key={`${message.role}-${index}`}>
             <span>{message.role === 'user' ? 'You' : 'Assistant'}</span>
-            <p>{message.content}</p>
+            <p>{renderMessageContent(message.content)}</p>
           </div>
         ))}
 
