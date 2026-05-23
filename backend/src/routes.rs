@@ -19,7 +19,7 @@ use crate::{
         upload_media_handler, verify_admin_handler,
     },
     auth::auth_middleware,
-    media,
+    media, portfolio_bot,
     profile::{Certificate, ChatScope, Education, PublicProfile, PublicProject, SocialLinks},
     safety, storage,
 };
@@ -100,11 +100,26 @@ async fn chat_handler(Json(payload): Json<ChatRequest>) -> Json<ChatResponse> {
         return Json(ChatResponse { reply, scope });
     }
 
-    let profile_context = match storage::load_chatbot_context_json(scope) {
+    let full_profile = match storage::load_profile() {
+        Ok(full_profile) => full_profile,
+        Err(error) => {
+            return Json(ChatResponse {
+                reply: format!("[Error] Failed to load portfolio data: {}", error),
+                scope,
+            });
+        }
+    };
+
+    if let Some(reply) = portfolio_bot::get_portfolio_reply(&full_profile, scope, &history) {
+        return Json(ChatResponse { reply, scope });
+    }
+
+    let chatbot_context = full_profile.to_chatbot_context(scope);
+    let profile_context = match serde_json::to_string_pretty(&chatbot_context) {
         Ok(profile_context) => profile_context,
         Err(error) => {
             return Json(ChatResponse {
-                reply: format!("[Error] Failed to load portfolio context: {}", error),
+                reply: format!("[Error] Failed to prepare portfolio context: {}", error),
                 scope,
             });
         }

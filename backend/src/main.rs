@@ -3,6 +3,7 @@ use std::{env, net::SocketAddr};
 pub mod admin;
 pub mod auth;
 pub mod media;
+pub mod portfolio_bot;
 pub mod profile;
 pub mod routes;
 pub mod safety;

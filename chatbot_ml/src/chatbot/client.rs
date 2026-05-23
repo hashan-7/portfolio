@@ -23,33 +23,27 @@ impl AiClient {
 
         let hf_token = match env::var("HF_API_TOKEN") {
             Ok(token) if !token.trim().is_empty() => token,
-            _ => {
-                return "[Error] HF_API_TOKEN is missing. Please check your environment configuration."
-                    .to_string()
-            }
+            _ => return ai_fallback_unavailable_reply(),
         };
 
         let hf_model = match env::var("HF_MODEL_ID") {
             Ok(model) if !model.trim().is_empty() => model,
-            _ => {
-                return "[Error] HF_MODEL_ID is missing. Please check your environment configuration."
-                    .to_string()
-            }
+            _ => return ai_fallback_unavailable_reply(),
         };
 
         if !hf_token.starts_with("hf_") {
-            return "[Error] HF_API_TOKEN has an invalid format.".to_string();
+            return ai_fallback_unavailable_reply();
         }
 
         let client = match Client::builder().timeout(Duration::from_secs(60)).build() {
             Ok(client) => client,
-            Err(error) => return format!("[Error] Failed to create HTTP client: {}", error),
+            Err(_) => return ai_fallback_unavailable_reply(),
         };
 
         let sanitized_history = sanitize_history(history);
 
         if sanitized_history.is_empty() {
-            return "[Error] Chat history is empty.".to_string();
+            return "Please ask a question about the portfolio.".to_string();
         }
 
         let mut api_messages = vec![json!({
@@ -79,28 +73,27 @@ impl AiClient {
             .await
         {
             Ok(response) => response,
-            Err(error) => return format!("[Error] Failed to connect to AI model: {}", error),
+            Err(_) => return ai_fallback_unavailable_reply(),
         };
 
         let status = response.status();
 
         let response_json: Value = match response.json().await {
             Ok(value) => value,
-            Err(error) => return format!("[Error] Failed to parse AI response: {}", error),
+            Err(_) => return ai_fallback_unavailable_reply(),
         };
 
         if !status.is_success() {
-            return extract_error_message(&response_json).unwrap_or_else(|| {
-                format!(
-                    "[Error] Hugging Face Router returned {}: {}",
-                    status, response_json
-                )
-            });
+            if is_credit_or_provider_error(&response_json) {
+                return ai_fallback_unavailable_reply();
+            }
+
+            return ai_fallback_unavailable_reply();
         }
 
         extract_chat_message(&response_json)
             .map(clean_model_reply)
-            .unwrap_or_else(|| "[Error] Unexpected response format from AI model.".to_string())
+            .unwrap_or_else(ai_fallback_unavailable_reply)
     }
 }
 
@@ -140,17 +133,18 @@ fn extract_chat_message(value: &Value) -> Option<String> {
         .filter(|text| !text.is_empty())
 }
 
-fn extract_error_message(value: &Value) -> Option<String> {
-    value
-        .get("error")
-        .and_then(Value::as_str)
-        .map(|message| format!("[Error] Hugging Face Router error: {}", message))
-        .or_else(|| {
-            value
-                .get("message")
-                .and_then(Value::as_str)
-                .map(|message| format!("[Error] Hugging Face Router error: {}", message))
-        })
+fn is_credit_or_provider_error(value: &Value) -> bool {
+    let text = value.to_string().to_lowercase();
+
+    text.contains("depleted")
+        || text.contains("credits")
+        || text.contains("monthly included")
+        || text.contains("inference providers")
+        || text.contains("purchase pre-paid")
+}
+
+fn ai_fallback_unavailable_reply() -> String {
+    "The AI fallback is temporarily unavailable. I can still answer many direct portfolio questions from the local portfolio data. Please ask about projects, skills, education, certificates, contact links, or a specific project number.".to_string()
 }
 
 fn clean_model_reply(text: String) -> String {
