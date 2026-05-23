@@ -34,7 +34,8 @@ pub fn get_portfolio_reply(
     }
 
     if is_skill_request(&normalized, &tokens)
-        && !is_project_specific_question(&normalized, &tokens, history)
+        && (!has_any_token(&tokens, &["project", "projects"])
+            || has_phrase(&normalized, &["based on the project", "based on projects"]))
     {
         return Some(skills_reply(profile, &normalized, &tokens));
     }
@@ -45,6 +46,10 @@ pub fn get_portfolio_reply(
 
     if is_education_request(&normalized, &tokens) {
         return Some(education_reply(profile, &normalized, &tokens));
+    }
+
+    if should_handle_project_before_contact(&normalized, &tokens, history) {
+        return handle_project_request(profile, history, &normalized, &tokens);
     }
 
     if is_contact_request(&normalized, &tokens) {
@@ -156,7 +161,13 @@ fn section_mode_reply(scope: ChatScope) -> String {
 }
 
 fn is_greeting(tokens: &[String]) -> bool {
-    tokens.len() <= 3 && has_any_token(tokens, &["hi", "hello", "hey", "welcome"])
+    tokens.len() <= 3
+        && has_any_token(
+            tokens,
+            &[
+                "hi", "hii", "hello", "helo", "hllo", "hrllo", "hey", "welcome",
+            ],
+        )
 }
 
 fn greeting_reply(profile: &FullProfile) -> String {
@@ -355,6 +366,15 @@ fn strength_summary_reply(profile: &FullProfile) -> String {
     lines.join("\n")
 }
 
+fn should_handle_project_before_contact(
+    input: &str,
+    tokens: &[String],
+    history: &[ChatMessage],
+) -> bool {
+    has_any_token(tokens, &["project", "projects", "app", "apps"])
+        || is_project_followup(input, tokens, history)
+}
+
 fn is_project_request(input: &str, tokens: &[String], history: &[ChatMessage]) -> bool {
     has_any_token(
         tokens,
@@ -378,6 +398,9 @@ fn is_project_followup(input: &str, tokens: &[String], history: &[ChatMessage]) 
             "education",
             "certificate",
             "certificates",
+            "contact",
+            "email",
+            "phone",
         ],
     ) {
         return false;
@@ -389,6 +412,9 @@ fn is_project_followup(input: &str, tokens: &[String], history: &[ChatMessage]) 
             || text.contains("stitch qa")
             || text.contains("pulseaid")
             || text.contains("hvtm")
+            || text.contains("queryweave")
+            || text.contains("vision-ai")
+            || text.contains("cooking-ai")
     });
 
     has_previous_project_context
@@ -396,20 +422,25 @@ fn is_project_followup(input: &str, tokens: &[String], history: &[ChatMessage]) 
             || has_any_token(
                 tokens,
                 &[
-                    "first", "second", "third", "last", "only", "ex", "explain", "details",
-                    "detail", "link", "github",
+                    "first",
+                    "second",
+                    "third",
+                    "last",
+                    "only",
+                    "ex",
+                    "explain",
+                    "details",
+                    "detail",
+                    "link",
+                    "links",
+                    "github",
+                    "more",
+                    "info",
+                    "information",
+                    "demo",
                 ],
-            ))
-}
-
-fn is_project_specific_question(input: &str, tokens: &[String], history: &[ChatMessage]) -> bool {
-    let has_project_word = has_any_token(tokens, &["project", "projects"]);
-    let has_number = extract_number(input, tokens).is_some();
-    let asks_link = asks_for_project_link(input, tokens);
-    let asks_details = asks_for_project_details(input, tokens);
-
-    has_project_word
-        && (has_number || asks_link || asks_details || is_project_followup(input, tokens, history))
+            )
+            || is_more_details_request(input, tokens))
 }
 
 fn handle_project_request(
@@ -458,6 +489,10 @@ fn handle_project_request(
     }
 
     if let Some(project) = resolve_project_reference(history, &projects, input, tokens) {
+        if is_more_details_request(input, tokens) {
+            return Some(project_more_details_reply(project));
+        }
+
         if asks_for_details || is_direct_project_reference(input, tokens, history) {
             return Some(project_detail_reply(project));
         }
@@ -497,8 +532,26 @@ fn asks_for_project_details(input: &str, tokens: &[String]) -> bool {
             "description",
             "about",
             "learn",
+            "fully",
+            "full",
         ],
     ) || has_phrase(input, &["tell me about", "what is"])
+}
+
+fn is_more_details_request(input: &str, tokens: &[String]) -> bool {
+    has_phrase(
+        input,
+        &[
+            "more details",
+            "more detail",
+            "more info",
+            "more information",
+            "tell me more",
+            "anything more",
+            "any more",
+        ],
+    ) || (has_token(tokens, "more")
+        && has_any_token(tokens, &["details", "detail", "info", "information"]))
 }
 
 fn asks_for_project_link(input: &str, tokens: &[String]) -> bool {
@@ -665,6 +718,15 @@ fn project_detail_reply(project: &Project) -> String {
     }
 
     lines.join("\n")
+}
+
+fn project_more_details_reply(project: &Project) -> String {
+    let title = clean(&project.title).unwrap_or_else(|| "this project".to_string());
+
+    format!(
+        "I have shared the confirmed details available in the portfolio data for {}. The portfolio does not include more verified details beyond that. You can ask for its tech stack, GitHub link, project purpose, or how it works.",
+        title
+    )
 }
 
 fn project_link_reply(project: &Project) -> String {
