@@ -37,6 +37,7 @@ export interface PublicProject {
   hf_link?: string;
   live_demo_link?: string;
   image_path?: string;
+  image_paths?: string[];
   video_path?: string;
   featured: boolean;
 }
@@ -58,6 +59,7 @@ export interface PublicProfile {
 
 export interface Project extends PublicProject {
   public_display: boolean;
+  chatbot_visible?: boolean;
   internal_chatbot_notes?: string;
   safe_notes?: string;
 }
@@ -81,8 +83,4 @@ export interface FullProfile {
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
-}
-
-export interface AdminLoginResponse {
-  token: string;
 }

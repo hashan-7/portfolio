@@ -1,7 +1,20 @@
-import type { AdminLoginResponse, ChatMessage, FullProfile, PublicProfile } from '../types';
+import type { ChatMessage, FullProfile, PublicProfile } from '../types';
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:7860' : '');
+
+function getAdminToken(): string | null {
+  return localStorage.getItem('admin_token');
+}
+
+function getAuthHeaders() {
+  const token = getAdminToken();
+
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 export async function getProfile(): Promise<PublicProfile> {
   const response = await fetch(`${API_BASE_URL}/api/profile`);
@@ -13,13 +26,13 @@ export async function getProfile(): Promise<PublicProfile> {
   return response.json();
 }
 
-export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
+export async function sendChatMessage(history: ChatMessage[], scope = 'all'): Promise<string> {
   const response = await fetch(`${API_BASE_URL}/api/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ history }),
+    body: JSON.stringify({ history, scope }),
   });
 
   if (!response.ok) {
@@ -31,7 +44,7 @@ export async function sendChatMessage(history: ChatMessage[]): Promise<string> {
   return data.reply ?? 'No reply received from the AI assistant.';
 }
 
-export async function adminLogin(email: string, password: string): Promise<string> {
+export async function loginAdmin(email: string, password: string): Promise<string> {
   const response = await fetch(`${API_BASE_URL}/api/admin/login`, {
     method: 'POST',
     headers: {
@@ -41,20 +54,32 @@ export async function adminLogin(email: string, password: string): Promise<strin
   });
 
   if (!response.ok) {
-    throw new Error(`Login failed. Status: ${response.status}`);
+    throw new Error('Invalid admin email or password.');
   }
 
-  const data = (await response.json()) as AdminLoginResponse;
+  const data = (await response.json()) as { token?: string };
+
+  if (!data.token) {
+    throw new Error('Admin token was not received.');
+  }
+
+  localStorage.setItem('admin_token', data.token);
+
   return data.token;
 }
 
-function getAuthHeaders() {
-  const token = localStorage.getItem('admin_token');
+export async function verifyAdminSession(): Promise<boolean> {
+  const token = getAdminToken();
 
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  };
+  if (!token) {
+    return false;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/admin/verify`, {
+    headers: getAuthHeaders(),
+  });
+
+  return response.ok;
 }
 
 export async function getAdminProfile(): Promise<FullProfile> {
@@ -82,7 +107,7 @@ export async function updateAdminProfile(profile: FullProfile): Promise<void> {
 }
 
 export async function uploadMedia(file: File): Promise<string[]> {
-  const token = localStorage.getItem('admin_token');
+  const token = getAdminToken();
   const formData = new FormData();
 
   formData.append('file', file);

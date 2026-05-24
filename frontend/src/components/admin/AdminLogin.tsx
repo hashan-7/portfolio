@@ -1,72 +1,108 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { adminLogin } from '../../services/api';
+import { loginAdmin, verifyAdminSession } from '../../services/api';
 
 function AdminLogin() {
   const navigate = useNavigate();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    verifyAdminSession()
+      .then((valid) => {
+        if (valid) {
+          navigate('/h7-admin/dashboard', { replace: true });
+        } else {
+          localStorage.removeItem('admin_token');
+        }
+      })
+      .catch(() => {
+        localStorage.removeItem('admin_token');
+      })
+      .finally(() => {
+        setIsChecking(false);
+      });
+  }, [navigate]);
+
+  const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (!email.trim() || !password) {
-      setErrorMessage('Email and password are required.');
+    if (!email.trim() || !password.trim()) {
+      setErrorMessage('Please enter admin email and password.');
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
     setErrorMessage('');
 
     try {
-      const token = await adminLogin(email.trim(), password);
-      localStorage.setItem('admin_token', token);
-      navigate('/h7-admin/dashboard');
+      await loginAdmin(email.trim(), password);
+      navigate('/h7-admin/dashboard', { replace: true });
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Login failed.');
+      localStorage.removeItem('admin_token');
+      setErrorMessage(error instanceof Error ? error.message : 'Admin login failed.');
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  return (
-    <main className="admin-page">
-      <section className="admin-card admin-login-card">
-        <p className="eyebrow">Private Admin</p>
-        <h1>H7 Admin Login</h1>
-        <p className="admin-muted">This route is protected and is not linked from the public UI.</p>
+  if (isChecking) {
+    return <div className="state-message">Checking admin session...</div>;
+  }
 
-        <form className="admin-form" onSubmit={handleSubmit}>
+  return (
+    <main className="admin-login-page">
+      <section className="admin-login-card">
+        <div className="admin-login-brand">
+          <div className="admin-brand-logo">H7</div>
+          <div>
+            <p className="eyebrow">Private Admin</p>
+            <h1>Portfolio Manager</h1>
+          </div>
+        </div>
+
+        <p className="admin-muted">
+          Sign in to manage profile data, projects, certificates, education, media paths, and
+          chatbot context.
+        </p>
+
+        <form className="admin-login-form" onSubmit={handleLogin}>
           <label>
-            Email
+            Admin Email
             <input
               type="email"
               value={email}
               onChange={(event) => setEmail(event.target.value)}
-              placeholder="Admin email"
+              placeholder="admin@email.com"
               autoComplete="email"
             />
           </label>
 
           <label>
-            Password
+            Admin Password
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Admin password"
+              placeholder="••••••••"
               autoComplete="current-password"
             />
           </label>
 
-          {errorMessage && <p className="admin-error">{errorMessage}</p>}
-
-          <button type="submit" disabled={isLoading}>
-            {isLoading ? 'Signing in...' : 'Sign in'}
+          <button type="submit" disabled={isSubmitting}>
+            {isSubmitting ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
+
+        {errorMessage && <p className="admin-error">{errorMessage}</p>}
+
+        <p className="admin-field-help">
+          This route is hidden from the public UI, but real authentication is still required.
+        </p>
       </section>
     </main>
   );

@@ -5,32 +5,52 @@ interface ContactFormProps {
   onChange: (profile: FullProfile) => void;
 }
 
-function ContactForm({ profile, onChange }: ContactFormProps) {
-  const socialLinks = profile.social_links ?? {};
+const emptyLinks: SocialLinks = {
+  github: '',
+  linkedin: '',
+  email: '',
+  phone: '',
+  website: '',
+  huggingface: '',
+  kaggle: '',
+  resume: '',
+  instagram: '',
+};
 
-  const updateSocial = (field: keyof SocialLinks, value: string) => {
+function ContactForm({ profile, onChange }: ContactFormProps) {
+  const links = profile.social_links ?? emptyLinks;
+
+  const updateLinks = (nextLinks: SocialLinks) => {
     onChange({
       ...profile,
-      social_links: {
-        ...socialLinks,
-        [field]: value || undefined,
-      },
+      social_links: nextLinks,
     });
   };
 
   return (
-    <section className="admin-section">
-      <h2>Contact & Links</h2>
-      <p className="admin-muted">These links are shown as public contact/link buttons.</p>
+    <section className="admin-section clean">
+      <div className="admin-form-toolbar">
+        <div>
+          <h2>Contact & Links</h2>
+          <p className="admin-muted">
+            Add only the links you want available through the portfolio UI or chatbot.
+          </p>
+        </div>
+      </div>
 
-      <div className="admin-form">
+      <div className="admin-form-grid">
         <label>
           Email
           <input
             type="email"
-            value={socialLinks.email ?? ''}
-            onChange={(event) => updateSocial('email', event.target.value)}
-            placeholder="email@example.com"
+            value={links.email ?? ''}
+            onChange={(event) =>
+              updateLinks({
+                ...links,
+                email: event.target.value,
+              })
+            }
+            placeholder="example@email.com"
           />
         </label>
 
@@ -38,9 +58,14 @@ function ContactForm({ profile, onChange }: ContactFormProps) {
           Phone
           <input
             type="text"
-            value={socialLinks.phone ?? ''}
-            onChange={(event) => updateSocial('phone', event.target.value)}
-            placeholder="07XXXXXXXX"
+            value={links.phone ?? ''}
+            onChange={(event) =>
+              updateLinks({
+                ...links,
+                phone: event.target.value,
+              })
+            }
+            placeholder="076..."
           />
         </label>
 
@@ -48,8 +73,13 @@ function ContactForm({ profile, onChange }: ContactFormProps) {
           GitHub
           <input
             type="url"
-            value={socialLinks.github ?? ''}
-            onChange={(event) => updateSocial('github', event.target.value)}
+            value={links.github ?? ''}
+            onChange={(event) =>
+              updateLinks({
+                ...links,
+                github: event.target.value,
+              })
+            }
             placeholder="https://github.com/..."
           />
         </label>
@@ -58,8 +88,13 @@ function ContactForm({ profile, onChange }: ContactFormProps) {
           LinkedIn
           <input
             type="url"
-            value={socialLinks.linkedin ?? ''}
-            onChange={(event) => updateSocial('linkedin', event.target.value)}
+            value={links.linkedin ?? ''}
+            onChange={(event) =>
+              updateLinks({
+                ...links,
+                linkedin: event.target.value,
+              })
+            }
             placeholder="https://linkedin.com/in/..."
           />
         </label>
@@ -68,8 +103,13 @@ function ContactForm({ profile, onChange }: ContactFormProps) {
           Hugging Face
           <input
             type="url"
-            value={socialLinks.huggingface ?? ''}
-            onChange={(event) => updateSocial('huggingface', event.target.value)}
+            value={links.huggingface ?? ''}
+            onChange={(event) =>
+              updateLinks({
+                ...links,
+                huggingface: event.target.value,
+              })
+            }
             placeholder="https://huggingface.co/..."
           />
         </label>
@@ -78,8 +118,13 @@ function ContactForm({ profile, onChange }: ContactFormProps) {
           Kaggle
           <input
             type="url"
-            value={socialLinks.kaggle ?? ''}
-            onChange={(event) => updateSocial('kaggle', event.target.value)}
+            value={links.kaggle ?? ''}
+            onChange={(event) =>
+              updateLinks({
+                ...links,
+                kaggle: event.target.value,
+              })
+            }
             placeholder="https://www.kaggle.com/..."
           />
         </label>
@@ -88,9 +133,14 @@ function ContactForm({ profile, onChange }: ContactFormProps) {
           Resume
           <input
             type="url"
-            value={socialLinks.resume ?? ''}
-            onChange={(event) => updateSocial('resume', event.target.value)}
-            placeholder="https://..."
+            value={links.resume ?? ''}
+            onChange={(event) =>
+              updateLinks({
+                ...links,
+                resume: event.target.value,
+              })
+            }
+            placeholder="https://drive.google.com/..."
           />
         </label>
 
@@ -98,18 +148,28 @@ function ContactForm({ profile, onChange }: ContactFormProps) {
           Instagram
           <input
             type="url"
-            value={socialLinks.instagram ?? ''}
-            onChange={(event) => updateSocial('instagram', event.target.value)}
+            value={links.instagram ?? ''}
+            onChange={(event) =>
+              updateLinks({
+                ...links,
+                instagram: event.target.value,
+              })
+            }
             placeholder="https://instagram.com/..."
           />
         </label>
 
-        <label>
-          Website
+        <label className="wide">
+          Website / Portfolio URL
           <input
             type="url"
-            value={socialLinks.website ?? ''}
-            onChange={(event) => updateSocial('website', event.target.value)}
+            value={links.website ?? ''}
+            onChange={(event) =>
+              updateLinks({
+                ...links,
+                website: event.target.value,
+              })
+            }
             placeholder="https://..."
           />
         </label>

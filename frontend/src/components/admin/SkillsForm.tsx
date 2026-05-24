@@ -12,22 +12,24 @@ function textToList(value: string): string[] {
     .filter(Boolean);
 }
 
-function listToText(value: string[]): string {
-  return value.join('\n');
-}
-
 function SkillsForm({ profile, onChange }: SkillsFormProps) {
   return (
-    <section className="admin-section">
-      <h2>Skills & Focus Areas</h2>
-      <p className="admin-muted">Enter one item per line.</p>
+    <section className="admin-section clean">
+      <div className="admin-form-toolbar">
+        <div>
+          <h2>Skills & Focus Areas</h2>
+          <p className="admin-muted">
+            Use one item per line. JSON updates automatically while typing.
+          </p>
+        </div>
+      </div>
 
-      <div className="admin-form">
+      <div className="admin-form-grid">
         <label>
           Skills
           <textarea
-            className="admin-json-editor compact"
-            value={listToText(profile.skills ?? [])}
+            className="admin-json-editor compact tall"
+            value={(profile.skills ?? []).join('\n')}
             onChange={(event) =>
               onChange({
                 ...profile,
@@ -36,13 +38,14 @@ function SkillsForm({ profile, onChange }: SkillsFormProps) {
             }
             placeholder="Java&#10;Python&#10;Spring Boot"
           />
+          <span className="admin-field-help">One skill per line.</span>
         </label>
 
         <label>
           Focus Areas
           <textarea
-            className="admin-json-editor compact"
-            value={listToText(profile.focus_areas ?? [])}
+            className="admin-json-editor compact tall"
+            value={(profile.focus_areas ?? []).join('\n')}
             onChange={(event) =>
               onChange({
                 ...profile,
@@ -51,6 +54,7 @@ function SkillsForm({ profile, onChange }: SkillsFormProps) {
             }
             placeholder="Backend / API Development&#10;AI API Integration"
           />
+          <span className="admin-field-help">One focus area per line.</span>
         </label>
       </div>
     </section>
