@@ -172,8 +172,9 @@ PORT=7860
 HF_API_TOKEN=your_hugging_face_token
 HF_MODEL_ID=your_model_id
 PORTFOLIO_PROFILE_JSON=your_profile_json_if_not_using_data_file
-ADMIN_USERNAME=your_admin_username
+ADMIN_EMAIL=your_admin_email
 ADMIN_PASSWORD=your_admin_password
+ADMIN_SESSION_SECRET=minimum_32_characters_long_secret_value
 JWT_SECRET=your_jwt_secret
 ```
 

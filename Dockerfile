@@ -29,7 +29,12 @@ RUN apt-get update \
 COPY --from=backend-builder /app/target/release/backend /app/backend
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-RUN useradd -m -u 1000 user
+RUN useradd -m -u 1000 user \
+    && mkdir -p /app/data/profile \
+    && mkdir -p /app/data/assets/projects/images \
+    && mkdir -p /app/data/assets/projects/videos \
+    && chown -R user:user /app/data /app/frontend/dist /app/backend \
+    && chmod +x /app/backend
 
 USER user
 

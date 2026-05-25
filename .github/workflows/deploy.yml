@@ -18,4 +18,4 @@ jobs:
       - name: Push to HF Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://hashan-7:${HF_TOKEN}@huggingface.co/spaces/hashan-7/ai-portfolio HEAD:main
+        run: git push --force https://hashan-7:${HF_TOKEN}@huggingface.co/spaces/hashan-7/chamira-hashan HEAD:main
