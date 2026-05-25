@@ -1,21 +1,22 @@
-import { isVideoPath } from '../../utils/media';
+import { isVideoPath, normalizeMediaPath } from '../../utils/media';
 
 interface MediaPreviewProps {
   src?: string;
   alt?: string;
+  className?: string;
 }
 
-function MediaPreview({ src, alt = 'Media preview' }: MediaPreviewProps) {
-  if (!src) {
-    return null;
-  }
+function MediaPreview({ src, alt = 'Media preview', className = 'card-media' }: MediaPreviewProps) {
+  const safeSrc = normalizeMediaPath(src);
+
+  if (!safeSrc) return null;
 
   return (
-    <div className="card-media">
-      {isVideoPath(src) ? (
-        <video src={src} autoPlay muted loop playsInline />
+    <div className={className}>
+      {isVideoPath(safeSrc) ? (
+        <video src={safeSrc} autoPlay muted loop playsInline />
       ) : (
-        <img src={src} alt={alt} />
+        <img src={safeSrc} alt={alt} />
       )}
     </div>
   );

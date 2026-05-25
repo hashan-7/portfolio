@@ -20,36 +20,23 @@ function HomePage() {
       });
   }, []);
 
-  const renderProfile = () => {
-    if (isLoading) {
-      return <div className="state-message">Loading portfolio...</div>;
-    }
+  if (isLoading) {
+    return <div className="state-message">Loading portfolio...</div>;
+  }
 
-    if (errorMessage) {
-      return <div className="state-message error">{errorMessage}</div>;
-    }
+  if (errorMessage) {
+    return <div className="state-message error">{errorMessage}</div>;
+  }
 
-    if (!profile) {
-      return <div className="state-message error">Profile data is not available.</div>;
-    }
-
-    return <Profile profile={profile} />;
-  };
+  if (!profile) {
+    return <div className="state-message error">Profile data is not available.</div>;
+  }
 
   return (
-    <div className="app-container">
-      <header className="site-header">
-        <h1>AI Portfolio</h1>
-        <p>Stitching intelligence into every line of code.</p>
-      </header>
-
-      <div className="content-grid">
-        <div>{renderProfile()}</div>
-        <aside className="chat-section">
-          <Chatbot />
-        </aside>
-      </div>
-    </div>
+    <>
+      <Profile profile={profile} />
+      <Chatbot />
+    </>
   );
 }
 

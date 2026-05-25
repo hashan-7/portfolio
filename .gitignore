@@ -1,6 +1,9 @@
-# Rust
+# Rust build output
 /target/
 target/
+
+# Rust backup / temporary files
+**/*.rs.bk
 
 # Environment / Secrets
 .env
@@ -12,27 +15,48 @@ data/
 /data/
 /backend/data/
 /frontend/data/
+
+/uploads/
+/backend/uploads/
+/frontend/uploads/
+
+# Local test media/files
 test.png
 test.jpg
 test.jpeg
 test.webp
+test.gif
 test.mp4
+test.mov
+test.webm
 
-# Frontend
+# Frontend dependencies / build output
 /frontend/node_modules/
 /frontend/dist/
+/frontend/.vite/
+/frontend/.cache/
+/frontend/coverage/
 
-# Logs
+# Package manager debug logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
-# IDE
+# Local cache / temp
+.cache/
+.tmp/
+temp/
+tmp/
+
+# IDE / Editor
 .vscode/
 .idea/
+*.swp
+*.swo
 
-# OS
+# OS files
 .DS_Store
 Thumbs.db

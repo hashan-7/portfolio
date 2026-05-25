@@ -3,17 +3,17 @@ export function hasLink(value?: string): boolean {
 }
 
 export function formatExternalLink(value?: string): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-
+  if (!value) return undefined;
   const trimmed = value.trim();
+  if (!trimmed) return undefined;
 
-  if (!trimmed) {
-    return undefined;
-  }
-
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('mailto:') || trimmed.startsWith('tel:')) {
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('mailto:') ||
+    trimmed.startsWith('tel:') ||
+    trimmed.startsWith('/')
+  ) {
     return trimmed;
   }
 
@@ -21,17 +21,11 @@ export function formatExternalLink(value?: string): string | undefined {
 }
 
 export function emailLink(email?: string): string | undefined {
-  if (!email?.trim()) {
-    return undefined;
-  }
-
+  if (!email?.trim()) return undefined;
   return `mailto:${email.trim()}`;
 }
 
 export function phoneLink(phone?: string): string | undefined {
-  if (!phone?.trim()) {
-    return undefined;
-  }
-
+  if (!phone?.trim()) return undefined;
   return `tel:${phone.trim()}`;
 }

@@ -9,16 +9,12 @@ fn default_true() -> bool {
 pub struct Certificate {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub issuer: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub year: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub date: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
 }
@@ -27,28 +23,20 @@ pub struct Certificate {
 pub struct SocialLinks {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub github: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linkedin: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub phone: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub website: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub huggingface: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub kaggle: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resume: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub instagram: Option<String>,
 }
@@ -57,22 +45,16 @@ pub struct SocialLinks {
 pub struct Education {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub institution: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub degree: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub year: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub grade: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
 }
@@ -81,46 +63,32 @@ pub struct Education {
 pub struct Project {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_description: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<String>,
-
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tech_stack: Vec<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub github_link: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hf_link: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub live_demo_link: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_path: Option<String>,
-
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub image_paths: Vec<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub video_path: Option<String>,
-
     #[serde(default = "default_true")]
     pub public_display: bool,
-
     #[serde(default = "default_true")]
     pub chatbot_visible: bool,
-
     #[serde(default)]
     pub featured: bool,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub internal_chatbot_notes: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub safe_notes: Option<String>,
 }
@@ -129,40 +97,30 @@ pub struct Project {
 pub struct FullProfile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tagline: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bio: Option<String>,
-
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile_image_path: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skills: Vec<String>,
-
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub focus_areas: Vec<String>,
-
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub projects: Vec<Project>,
-
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub certificates: Vec<Certificate>,
-
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub education: Vec<Education>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub social_links: Option<SocialLinks>,
-
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chatbot_rules: Option<String>,
 }
@@ -190,6 +148,7 @@ pub struct PublicProfile {
     pub tagline: Option<String>,
     pub location: Option<String>,
     pub bio: Option<String>,
+    pub profile_image_path: Option<String>,
     pub skills: Vec<String>,
     pub focus_areas: Vec<String>,
     pub projects: Vec<PublicProject>,
@@ -218,6 +177,7 @@ pub struct ChatbotProfile {
     pub tagline: Option<String>,
     pub location: Option<String>,
     pub bio: Option<String>,
+    pub profile_image_path: Option<String>,
     pub skills: Vec<String>,
     pub focus_areas: Vec<String>,
     pub projects: Vec<ChatbotProject>,
@@ -302,6 +262,7 @@ impl From<FullProfile> for PublicProfile {
             tagline: full.tagline,
             location: full.location,
             bio: full.bio,
+            profile_image_path: full.profile_image_path,
             skills: full.skills,
             focus_areas: full.focus_areas,
             projects,
@@ -329,6 +290,9 @@ impl FullProfile {
             tagline: include_profile.then(|| self.tagline.clone()).flatten(),
             location: include_profile.then(|| self.location.clone()).flatten(),
             bio: include_profile.then(|| self.bio.clone()).flatten(),
+            profile_image_path: include_profile
+                .then(|| self.profile_image_path.clone())
+                .flatten(),
             skills: if include_skills {
                 self.skills.clone()
             } else {

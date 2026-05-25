@@ -40,8 +40,7 @@ export async function sendChatMessage(history: ChatMessage[], scope = 'all'): Pr
   }
 
   const data = (await response.json()) as { reply?: string };
-
-  return data.reply ?? 'No reply received from the AI assistant.';
+  return data.reply ?? 'No reply received from H7 Assistant.';
 }
 
 export async function loginAdmin(email: string, password: string): Promise<string> {
@@ -64,7 +63,6 @@ export async function loginAdmin(email: string, password: string): Promise<strin
   }
 
   localStorage.setItem('admin_token', data.token);
-
   return data.token;
 }
 
@@ -125,6 +123,5 @@ export async function uploadMedia(file: File): Promise<string[]> {
   }
 
   const data = (await response.json()) as { files?: string[] };
-
   return data.files ?? [];
 }

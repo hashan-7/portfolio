@@ -49,6 +49,7 @@ export interface PublicProfile {
   tagline?: string;
   location?: string;
   bio?: string;
+  profile_image_path?: string;
   skills: string[];
   focus_areas: string[];
   projects: PublicProject[];
@@ -71,6 +72,7 @@ export interface FullProfile {
   tagline?: string;
   location?: string;
   bio?: string;
+  profile_image_path?: string;
   skills: string[];
   focus_areas: string[];
   projects: Project[];
