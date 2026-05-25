@@ -47,7 +47,7 @@ pub async fn login_handler(
     }
 
     generate_token(&admin_email)
-        .map(|token| Json(AuthResponse { token }))
+        .map(Json)
         .map_err(|error| (StatusCode::INTERNAL_SERVER_ERROR, Json(error)))
 }
 

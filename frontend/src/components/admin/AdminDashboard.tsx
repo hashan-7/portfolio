@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getAdminProfile, updateAdminProfile } from '../../services/api';
+import {
+  getAdminProfile,
+  getAdminSessionRemainingMs,
+  logoutAdmin,
+  updateAdminProfile,
+} from '../../services/api';
 import type { FullProfile } from '../../types';
 import ConfirmDialog from '../common/ConfirmDialog';
 import BasicProfileForm from './BasicProfileForm';
@@ -66,12 +71,36 @@ const tabs: { id: AdminTab; label: string; number: string }[] = [
   { id: 'json', label: 'Advanced JSON', number: '07' },
 ];
 
+function formatRemainingTime(milliseconds: number | null): string {
+  if (milliseconds === null) {
+    return 'Unknown';
+  }
+
+  if (milliseconds <= 0) {
+    return 'Expired';
+  }
+
+  const totalMinutes = Math.ceil(milliseconds / 60000);
+
+  if (totalMinutes >= 60) {
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  return `${totalMinutes}m`;
+}
+
 function AdminDashboard() {
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [jsonText, setJsonText] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTab>('profile');
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [sessionRemainingText, setSessionRemainingText] = useState(
+    formatRemainingTime(getAdminSessionRemainingMs()),
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -86,9 +115,52 @@ function AdminDashboard() {
   const certificateCount = useMemo(() => profile?.certificates?.length ?? 0, [profile]);
   const skillCount = useMemo(() => profile?.skills?.length ?? 0, [profile]);
 
+  const endAdminSession = () => {
+    logoutAdmin();
+    window.location.replace('/h7-admin');
+  };
+
+  useEffect(() => {
+    const syncRemainingTime = () => {
+      const remaining = getAdminSessionRemainingMs();
+      setSessionRemainingText(formatRemainingTime(remaining));
+
+      if (remaining !== null && remaining <= 0) {
+        endAdminSession();
+      }
+    };
+
+    syncRemainingTime();
+
+    const intervalId = window.setInterval(syncRemainingTime, 30000);
+    const remaining = getAdminSessionRemainingMs();
+
+    const timeoutId =
+      remaining !== null
+        ? window.setTimeout(endAdminSession, Math.max(0, remaining) + 500)
+        : undefined;
+
+    return () => {
+      window.clearInterval(intervalId);
+
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
+
   const setProfileAndJson = (nextProfile: FullProfile) => {
     setProfile(nextProfile);
     setJsonText(JSON.stringify(nextProfile, null, 2));
+  };
+
+  const handleAdminError = (error: unknown, fallbackMessage: string) => {
+    const message = error instanceof Error ? error.message : fallbackMessage;
+    setErrorMessage(message);
+
+    if (message.toLowerCase().includes('session expired')) {
+      window.setTimeout(endAdminSession, 900);
+    }
   };
 
   const loadProfile = async () => {
@@ -100,7 +172,7 @@ function AdminDashboard() {
       const data = await getAdminProfile();
       setProfileAndJson(data);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to load admin profile.');
+      handleAdminError(error, 'Failed to load admin profile.');
     } finally {
       setIsLoading(false);
     }
@@ -145,7 +217,7 @@ function AdminDashboard() {
       await updateAdminProfile(profile);
       setStatusMessage(`${tabMeta[activeTab].title} saved successfully.`);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to save profile.');
+      handleAdminError(error, 'Failed to save profile.');
     } finally {
       setIsSaving(false);
     }
@@ -175,15 +247,14 @@ function AdminDashboard() {
       setProfileAndJson(parsedProfile);
       setStatusMessage('JSON saved successfully.');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Failed to save JSON.');
+      handleAdminError(error, 'Failed to save JSON.');
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('admin_token');
-    window.location.replace('/h7-admin');
+    endAdminSession();
   };
 
   const renderActiveTab = () => {
@@ -396,16 +467,16 @@ function AdminDashboard() {
                     <strong>Active</strong>
                   </div>
                   <div>
+                    <span>Session Ends</span>
+                    <strong>{sessionRemainingText}</strong>
+                  </div>
+                  <div>
                     <span>Profile JSON</span>
                     <strong>{profile ? 'Loaded' : 'Missing'}</strong>
                   </div>
                   <div>
                     <span>JSON Sync</span>
                     <strong>Auto</strong>
-                  </div>
-                  <div>
-                    <span>AI Fallback</span>
-                    <strong>Optional</strong>
                   </div>
                 </div>
               </div>

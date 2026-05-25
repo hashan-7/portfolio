@@ -9,6 +9,9 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode}
 use serde::{Deserialize, Serialize};
 use std::env;
 
+const ADMIN_SESSION_SECONDS: i64 = 60 * 60;
+const TOKEN_CLOCK_GRACE_SECONDS: usize = 60;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
@@ -18,6 +21,8 @@ pub struct Claims {
 #[derive(Serialize)]
 pub struct AuthResponse {
     pub token: String,
+    pub expires_at: usize,
+    pub expires_in_seconds: usize,
 }
 
 #[derive(Serialize)]
@@ -34,11 +39,11 @@ fn session_secret() -> Result<String, AuthError> {
         })
 }
 
-pub fn generate_token(email: &str) -> Result<String, AuthError> {
+pub fn generate_token(email: &str) -> Result<AuthResponse, AuthError> {
     let secret = session_secret()?;
 
     let expiration = Utc::now()
-        .checked_add_signed(Duration::hours(24))
+        .checked_add_signed(Duration::seconds(ADMIN_SESSION_SECONDS))
         .ok_or_else(|| AuthError {
             error: "Failed to create token expiration.".to_string(),
         })?
@@ -49,20 +54,26 @@ pub fn generate_token(email: &str) -> Result<String, AuthError> {
         exp: expiration,
     };
 
-    encode(
+    let token = encode(
         &Header::default(),
         &claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
     .map_err(|_| AuthError {
         error: "Failed to generate token.".to_string(),
+    })?;
+
+    Ok(AuthResponse {
+        token,
+        expires_at: expiration,
+        expires_in_seconds: ADMIN_SESSION_SECONDS as usize,
     })
 }
 
 pub fn verify_token(token: &str) -> Result<Claims, AuthError> {
     let secret = session_secret()?;
 
-    decode::<Claims>(
+    let claims = decode::<Claims>(
         token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::default(),
@@ -70,7 +81,20 @@ pub fn verify_token(token: &str) -> Result<Claims, AuthError> {
     .map(|data| data.claims)
     .map_err(|_| AuthError {
         error: "Invalid or expired token.".to_string(),
-    })
+    })?;
+
+    let now = Utc::now().timestamp() as usize;
+    let maximum_allowed_exp = now
+        .saturating_add(ADMIN_SESSION_SECONDS as usize)
+        .saturating_add(TOKEN_CLOCK_GRACE_SECONDS);
+
+    if claims.exp > maximum_allowed_exp {
+        return Err(AuthError {
+            error: "Invalid or expired token.".to_string(),
+        });
+    }
+
+    Ok(claims)
 }
 
 pub async fn auth_middleware(

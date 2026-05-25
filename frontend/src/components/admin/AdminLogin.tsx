@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { loginAdmin, verifyAdminSession } from '../../services/api';
 
-function AdminLogin() {
-  const navigate = useNavigate();
+interface AdminLoginProps {
+  onLoginSuccess?: () => void;
+}
 
+function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -12,21 +13,35 @@ function AdminLogin() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
+    let active = true;
+
     verifyAdminSession()
       .then((valid) => {
+        if (!active) {
+          return;
+        }
+
         if (valid) {
-          navigate('/h7-admin/dashboard', { replace: true });
+          onLoginSuccess?.();
         } else {
           localStorage.removeItem('admin_token');
         }
       })
       .catch(() => {
-        localStorage.removeItem('admin_token');
+        if (active) {
+          localStorage.removeItem('admin_token');
+        }
       })
       .finally(() => {
-        setIsChecking(false);
+        if (active) {
+          setIsChecking(false);
+        }
       });
-  }, [navigate]);
+
+    return () => {
+      active = false;
+    };
+  }, [onLoginSuccess]);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -41,7 +56,7 @@ function AdminLogin() {
 
     try {
       await loginAdmin(email.trim(), password);
-      navigate('/h7-admin/dashboard', { replace: true });
+      onLoginSuccess?.();
     } catch (error) {
       localStorage.removeItem('admin_token');
       setErrorMessage(error instanceof Error ? error.message : 'Admin login failed.');

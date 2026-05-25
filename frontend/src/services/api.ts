@@ -3,8 +3,51 @@ import type { ChatMessage, FullProfile, PublicProfile } from '../types';
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:7860' : '');
 
+const ADMIN_TOKEN_KEY = 'admin_token';
+const ADMIN_TOKEN_EXPIRES_AT_KEY = 'admin_token_expires_at';
+
+interface AdminLoginResponse {
+  token?: string;
+  expires_at?: number;
+  expires_in_seconds?: number;
+}
+
+function getStoredAdminExpiryMs(): number | null {
+  const value = localStorage.getItem(ADMIN_TOKEN_EXPIRES_AT_KEY);
+
+  if (!value) {
+    return null;
+  }
+
+  const parsedValue = Number(value);
+
+  if (!Number.isFinite(parsedValue) || parsedValue <= 0) {
+    return null;
+  }
+
+  return parsedValue;
+}
+
+function clearAdminToken(): void {
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_TOKEN_EXPIRES_AT_KEY);
+}
+
 function getAdminToken(): string | null {
-  return localStorage.getItem('admin_token');
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+
+  if (!token) {
+    return null;
+  }
+
+  const expiresAtMs = getStoredAdminExpiryMs();
+
+  if (expiresAtMs !== null && Date.now() >= expiresAtMs) {
+    clearAdminToken();
+    return null;
+  }
+
+  return token;
 }
 
 function getAuthHeaders() {
@@ -14,6 +57,21 @@ function getAuthHeaders() {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+}
+
+export function logoutAdmin(): void {
+  clearAdminToken();
+}
+
+export function getAdminSessionRemainingMs(): number | null {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  const expiresAtMs = getStoredAdminExpiryMs();
+
+  if (!token || expiresAtMs === null) {
+    return null;
+  }
+
+  return expiresAtMs - Date.now();
 }
 
 export async function getProfile(): Promise<PublicProfile> {
@@ -53,16 +111,23 @@ export async function loginAdmin(email: string, password: string): Promise<strin
   });
 
   if (!response.ok) {
+    clearAdminToken();
     throw new Error('Invalid admin email or password.');
   }
 
-  const data = (await response.json()) as { token?: string };
+  const data = (await response.json()) as AdminLoginResponse;
 
   if (!data.token) {
+    clearAdminToken();
     throw new Error('Admin token was not received.');
   }
 
-  localStorage.setItem('admin_token', data.token);
+  const fallbackExpiresAtMs = Date.now() + 60 * 60 * 1000;
+  const expiresAtMs = data.expires_at ? data.expires_at * 1000 : fallbackExpiresAtMs;
+
+  localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
+  localStorage.setItem(ADMIN_TOKEN_EXPIRES_AT_KEY, String(expiresAtMs));
+
   return data.token;
 }
 
@@ -70,20 +135,36 @@ export async function verifyAdminSession(): Promise<boolean> {
   const token = getAdminToken();
 
   if (!token) {
+    clearAdminToken();
     return false;
   }
 
-  const response = await fetch(`${API_BASE_URL}/api/admin/verify`, {
-    headers: getAuthHeaders(),
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/admin/verify`, {
+      headers: getAuthHeaders(),
+    });
 
-  return response.ok;
+    if (!response.ok) {
+      clearAdminToken();
+      return false;
+    }
+
+    return true;
+  } catch {
+    clearAdminToken();
+    return false;
+  }
 }
 
 export async function getAdminProfile(): Promise<FullProfile> {
   const response = await fetch(`${API_BASE_URL}/api/admin/profile`, {
     headers: getAuthHeaders(),
   });
+
+  if (response.status === 401) {
+    clearAdminToken();
+    throw new Error('Admin session expired. Please sign in again.');
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to load admin profile. Status: ${response.status}`);
@@ -98,6 +179,11 @@ export async function updateAdminProfile(profile: FullProfile): Promise<void> {
     headers: getAuthHeaders(),
     body: JSON.stringify(profile),
   });
+
+  if (response.status === 401) {
+    clearAdminToken();
+    throw new Error('Admin session expired. Please sign in again.');
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to update profile. Status: ${response.status}`);
@@ -117,6 +203,11 @@ export async function uploadMedia(file: File): Promise<string[]> {
     },
     body: formData,
   });
+
+  if (response.status === 401) {
+    clearAdminToken();
+    throw new Error('Admin session expired. Please sign in again.');
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to upload media. Status: ${response.status}`);
