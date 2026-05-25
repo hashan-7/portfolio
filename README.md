@@ -1,4 +1,14 @@
-# H7 Personal Portfolio
+---
+title: Chamira Hashan Portfolio
+emoji: 💜
+colorFrom: purple
+colorTo: pink
+sdk: docker
+pinned: false
+short_description: Full-stack personal portfolio with Rust, React, admin-managed data, and H7 Assistant.
+---
+
+# Hashan Personal Portfolio
 
 A professional personal portfolio website for **Chamira Hashan**, built to showcase practical backend, AI/ML, full-stack, mobile, and software engineering projects.
 
