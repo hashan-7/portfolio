@@ -182,10 +182,11 @@ function Profile({ profile }: ProfileProps) {
   const certificates = profile.certificates ?? [];
   const education = profile.education ?? [];
   const socialLinks = socialItems(profile.social_links);
+  const resumeItem = socialLinks.find((item) => item.key === 'resume');
+  const profileSocialLinks = socialLinks.filter((item) => item.key !== 'resume');
   const displayName = profile.display_name ?? profile.name ?? 'Chamira Hashan';
   const role = profile.role ?? '';
   const tagline = profile.tagline ?? 'Building practical backend, AI/ML, and full-stack software projects.';
-  const heroBio = profile.bio ?? '';
   const profileImage = mediaSource(profile.profile_image_path);
 
   const [activeSection, setActiveSection] = useState('home');
@@ -422,20 +423,54 @@ function Profile({ profile }: ProfileProps) {
       </div>
 
       <section className="hero" id="home">
-        <div className="hero-content">
-          <div className="hero-kicker">{displayName}</div>
+        <div className="hero-mobile-frame">
+          <div className="hero-content">
+            <div className="hero-kicker">{displayName}</div>
 
-          <h1>{tagline}</h1>
+            <h1>{tagline}</h1>
 
-          {role && <p className="hero-role">{role}</p>}
-          {heroBio && <p>{heroBio}</p>}
-          {profile.location && <p className="profile-location">{profile.location}</p>}
+            {role && <p className="hero-role">{role}</p>}
+            {profile.location && <p className="profile-location">{profile.location}</p>}
+          </div>
 
-          {socialLinks.length > 0 && (
+          <div className="hero-visual">
+            <div className={`portrait-card ${profileImage ? 'has-photo' : ''}`}>
+              {profileImage && <img className="profile-photo" src={profileImage} alt={`${displayName} profile`} />}
+              <div className="portrait-fallback">H7</div>
+              <div className="status-dot">✦</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="hero-mobile-actions">
+          {resumeItem && (
+            <a
+              className="download-cv-button"
+              href={resumeItem.href}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Download CV"
+            >
+              Download CV
+            </a>
+          )}
+
+          <div className="hero-mini-counts">
+            <div>
+              <strong>{padCount(projects.length)}</strong>
+              <span>Projects</span>
+            </div>
+            <div>
+              <strong>{padCount(skills.length)}</strong>
+              <span>Tech Count</span>
+            </div>
+          </div>
+
+          {profileSocialLinks.length > 0 && (
             <div className="social-only-row">
-              {socialLinks.map((item) => (
+              {profileSocialLinks.map((item) => (
                 <a
-                  className={`social-only ${item.key === 'resume' ? 'cv-social' : ''}`}
+                  className="social-only"
                   href={item.href}
                   target={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : '_blank'}
                   rel={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : 'noreferrer'}
@@ -448,14 +483,6 @@ function Profile({ profile }: ProfileProps) {
               ))}
             </div>
           )}
-        </div>
-
-        <div className="hero-visual">
-          <div className={`portrait-card ${profileImage ? 'has-photo' : ''}`}>
-            {profileImage && <img className="profile-photo" src={profileImage} alt={`${displayName} profile`} />}
-            <div className="portrait-fallback">H7</div>
-            <div className="status-dot">✦</div>
-          </div>
         </div>
       </section>
 
@@ -672,18 +699,9 @@ function Profile({ profile }: ProfileProps) {
         </section>
       )}
 
-      <footer
-  className="portfolio-footer"
-  style={{
-    width: '100%',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    textAlign: 'center',
-  }}
->
-  © {new Date().getFullYear()} {displayName}. All rights reserved.
-</footer>
+      <footer className="portfolio-footer">
+        © {new Date().getFullYear()} {displayName}. All rights reserved.
+      </footer>
     </main>
   );
 }

@@ -14,20 +14,56 @@ interface DragState {
   offsetY: number;
 }
 
+function friendlyLinkLabel(url: string): string {
+  const lowerUrl = url.toLowerCase();
+
+  if (lowerUrl.includes('github.com')) {
+    return 'GitHub Link ↗';
+  }
+
+  if (lowerUrl.includes('huggingface.co')) {
+    return 'Hugging Face Link ↗';
+  }
+
+  if (lowerUrl.includes('linkedin.com')) {
+    return 'LinkedIn Link ↗';
+  }
+
+  if (lowerUrl.includes('drive.google.com')) {
+    return 'Google Drive Link ↗';
+  }
+
+  if (lowerUrl.includes('kaggle.com')) {
+    return 'Kaggle Link ↗';
+  }
+
+  if (lowerUrl.includes('instagram.com')) {
+    return 'Instagram Link ↗';
+  }
+
+  return 'Open Link ↗';
+}
+
 function renderMessageContent(content: string) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = content.split(urlRegex);
 
   return parts.map((part, index) => {
     if (part.match(urlRegex)) {
+      const cleanUrl = part.replace(/[),.]+$/, '');
+      const trailing = part.slice(cleanUrl.length);
+
       return (
-        <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer">
-          {part}
-        </a>
+        <span key={`${part}-${index}`}>
+          <a className="message-link" href={cleanUrl} target="_blank" rel="noreferrer">
+            {friendlyLinkLabel(cleanUrl)}
+          </a>
+          {trailing && <span className="message-text-part">{trailing}</span>}
+        </span>
       );
     }
 
-    return <span key={`${part}-${index}`}>{part}</span>;
+    return <span className="message-text-part" key={`${part}-${index}`}>{part}</span>;
   });
 }
 
@@ -327,14 +363,14 @@ function Chatbot() {
 
             {messages.map((message, index) => (
               <div className={`msg ${message.role}`} key={`${message.role}-${index}`}>
-                <span className="msg-label">{message.role === 'user' ? 'You' : 'H7 Assistance'}</span>
+                <span className="msg-label">{message.role === 'user' ? 'You' : 'H7 Assistant'}</span>
                 <p>{renderMessageContent(message.content)}</p>
               </div>
             ))}
 
             {isWaiting && !isTypingReply && (
               <div className="msg assistant">
-                <span className="msg-label">H7 Assistance</span>
+                <span className="msg-label">H7 Assistant</span>
                 <div className="typing">
                   <i />
                   <i />

@@ -1,4 +1,4 @@
-use crate::profile::{ChatScope, FullProfile};
+use crate::profile::FullProfile;
 use anyhow::{Context, Result};
 use std::{
     env, fs,
@@ -54,14 +54,6 @@ pub fn load_profile() -> Result<FullProfile> {
     }
 
     anyhow::bail!("Profile data was not found in bucket storage or environment configuration")
-}
-
-pub fn load_chatbot_context_json(scope: ChatScope) -> Result<String> {
-    let profile = load_profile()?;
-    let chatbot_context = profile.to_chatbot_context(scope);
-
-    serde_json::to_string_pretty(&chatbot_context)
-        .with_context(|| "Failed to serialize chatbot profile context")
 }
 
 pub fn save_profile(profile: &FullProfile) -> Result<()> {

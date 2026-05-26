@@ -4,7 +4,6 @@ use axum::{
     middleware,
     routing::{get, post},
 };
-use chatbot_ml::chatbot::client::{AiClient, ChatMessage as MlChatMessage};
 use serde::{Deserialize, Serialize};
 use tower_http::{
     cors::{Any, CorsLayer},
@@ -20,8 +19,8 @@ use crate::{
     },
     auth::auth_middleware,
     media, portfolio_bot,
-    profile::{Certificate, ChatScope, Education, PublicProfile, PublicProject, SocialLinks},
-    safety, storage,
+    profile::{Certificate, Education, PublicProfile, PublicProject, SocialLinks},
+    storage,
 };
 
 #[derive(Serialize, ToSchema)]
@@ -38,14 +37,11 @@ pub struct ChatMessage {
 #[derive(Deserialize, ToSchema)]
 pub struct ChatRequest {
     pub history: Vec<ChatMessage>,
-    #[serde(default)]
-    pub scope: ChatScope,
 }
 
 #[derive(Serialize, ToSchema)]
 pub struct ChatResponse {
     pub reply: String,
-    pub scope: ChatScope,
 }
 
 #[derive(OpenApi)]
@@ -55,7 +51,6 @@ pub struct ChatResponse {
         ChatRequest,
         ChatResponse,
         ChatMessage,
-        ChatScope,
         PublicProfile,
         PublicProject,
         Certificate,
@@ -82,58 +77,38 @@ async fn health_check() -> &'static str {
     path = "/api/chat",
     tag = "Portfolio API",
     request_body = ChatRequest,
-    responses((status = 200, description = "Chatbot response successfully generated", body = ChatResponse))
+    responses((status = 200, description = "Portfolio assistant response generated", body = ChatResponse))
 )]
 async fn chat_handler(Json(payload): Json<ChatRequest>) -> Json<ChatResponse> {
-    let scope = payload.scope;
-
-    let history = payload
+    let latest_user_message = payload
         .history
-        .into_iter()
-        .map(|message| MlChatMessage {
-            role: message.role,
-            content: message.content,
-        })
-        .collect::<Vec<_>>();
+        .iter()
+        .rev()
+        .find(|message| message.role.trim() == "user")
+        .map(|message| message.content.trim())
+        .unwrap_or("");
 
-    if let Some(reply) = safety::get_safety_reply(&history) {
-        return Json(ChatResponse { reply, scope });
-    }
+    let recent_context = payload
+        .history
+        .iter()
+        .rev()
+        .take(12)
+        .map(|message| format!("{}: {}", message.role.trim(), message.content.trim()))
+        .collect::<Vec<_>>();
 
     let full_profile = match storage::load_profile() {
         Ok(full_profile) => full_profile,
         Err(error) => {
             return Json(ChatResponse {
                 reply: format!("[Error] Failed to load portfolio data: {}", error),
-                scope,
             });
         }
     };
 
-    if let Some(reply) = portfolio_bot::get_portfolio_reply(&full_profile, scope, &history) {
-        return Json(ChatResponse { reply, scope });
-    }
+    let reply =
+        portfolio_bot::get_portfolio_reply(&full_profile, latest_user_message, &recent_context);
 
-    let chatbot_context = full_profile.to_chatbot_context(scope);
-    let profile_context = match serde_json::to_string_pretty(&chatbot_context) {
-        Ok(profile_context) => profile_context,
-        Err(error) => {
-            return Json(ChatResponse {
-                reply: format!("[Error] Failed to prepare portfolio context: {}", error),
-                scope,
-            });
-        }
-    };
-
-    let reply = AiClient::get_reply(
-        &history,
-        &profile_context,
-        scope.as_prompt_label(),
-        scope.as_display_label(),
-    )
-    .await;
-
-    Json(ChatResponse { reply, scope })
+    Json(ChatResponse { reply })
 }
 
 #[utoipa::path(

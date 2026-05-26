@@ -6,7 +6,6 @@ pub mod media;
 pub mod portfolio_bot;
 pub mod profile;
 pub mod routes;
-pub mod safety;
 pub mod storage;
 
 #[tokio::main]

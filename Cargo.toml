@@ -1,7 +1,6 @@
 [workspace]
 members = [
-    "backend",
-    "chatbot_ml"
+    "backend"
 ]
 resolver = "2"
 
