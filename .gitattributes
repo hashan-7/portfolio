@@ -1,0 +1,2 @@
+frontend/src/**/*.css linguist-vendored
+frontend/src/App.css linguist-vendored
