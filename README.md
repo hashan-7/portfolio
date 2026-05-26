@@ -5,43 +5,54 @@ colorFrom: purple
 colorTo: pink
 sdk: docker
 pinned: false
-short_description: Rust React portfolio with H7 Assistant
+short_description: Rust React portfolio with local H7 Assistant
 ---
 
-# Hashan Personal Portfolio
+# Chamira Hashan Personal Portfolio
 
-A professional personal portfolio website for **Chamira Hashan**, built to showcase practical backend, AI/ML, full-stack, mobile, and software engineering projects.
+A professional full-stack personal portfolio website for **Chamira Hashan**, built to showcase backend, AI/ML, full-stack, mobile, and software engineering projects.
 
-This portfolio includes a public portfolio interface, an internal admin panel for managing profile data, and an H7 Assistant chatbot that answers only from the provided portfolio information.
+The project includes a public portfolio website, a protected admin panel for managing portfolio data, media upload support, and a local H7 Assistant chatbot that answers from the portfolio JSON data without using external AI inference credits.
+
+---
+
+## Live Portfolio
+
+```text
+https://hashan-7-chamira-hashan.hf.space
+```
 
 ---
 
 ## Overview
 
-H7 Personal Portfolio is a full-stack portfolio system designed with a clean premium UI, secure admin editing flow, dynamic JSON-based profile data, and a portfolio-specific assistant.
+This portfolio is designed as a dynamic portfolio system instead of a static hardcoded website.
 
-The public website displays profile information, projects, skills, certificates, education, social links, and contact details. The admin panel allows controlled updates to portfolio data without hardcoding public content inside frontend components.
+The public website renders profile details, projects, skills, certificates, education, social links, and CV access from backend-managed JSON data. The admin panel allows the portfolio owner to update profile content, project details, certificates, education entries, links, and media paths without editing frontend source code.
+
+The H7 Assistant is a local portfolio assistant. It answers common portfolio questions using the stored profile data, such as project details, skills, certificates, education, contact links, and overall profile summary. It does not call Hugging Face Router or external AI inference providers.
 
 ---
 
 ## Key Features
 
 - Premium dark purple responsive portfolio UI
-- Mobile, tablet, and desktop compatible layout
-- Dynamic profile, skills, projects, certificates, and education rendering
+- Mobile-first home section layout
+- Dynamic profile, project, skills, certificates, and education rendering
 - Project carousel with typed description animation
-- Project image support with controlled preview sizing
+- Project image and video preview support
 - Certificate flip-book style presentation
 - Skills ticker animation
-- Profile image support through admin upload flow
+- Social links and CV access
 - Floating H7 Assistant chatbot popup
-- Draggable chatbot window using title area only
-- Chatbot typing animation for assistant replies
-- Admin panel for updating portfolio JSON data
-- Hidden admin route with authentication requirement
+- Local JSON-based portfolio assistant replies
+- Protected admin panel with authentication
+- One-hour admin session expiry
+- Admin-managed JSON profile data
 - Media upload support for project/profile assets
-- Rust Axum backend with Vite React frontend
-- Hugging Face Spaces compatible deployment flow
+- Rust Axum backend
+- React TypeScript Vite frontend
+- Docker-based Hugging Face Spaces deployment
 
 ---
 
@@ -53,9 +64,10 @@ The public website displays profile information, projects, skills, certificates,
 - Axum
 - Tokio
 - Serde
-- Reqwest
+- Serde JSON
 - Tower HTTP
 - Utoipa / Swagger UI
+- JSON Web Token authentication
 
 ### Frontend
 
@@ -65,17 +77,20 @@ The public website displays profile information, projects, skills, certificates,
 - CSS
 - Responsive UI design
 
-### AI / Chatbot
+### Chatbot
 
-- Hugging Face Router compatible chat completion flow
-- Portfolio-context-only assistant behavior
-- Local rule-based fallback/safety handling where configured
+- Local JSON-based portfolio assistant
+- No external AI model call required
+- No Hugging Face Inference Provider credit usage
+- Portfolio-data-only answers
+- Simple guardrails for out-of-scope questions
 
 ### Storage
 
 - JSON profile data
 - Local `/data` storage flow
 - Hugging Face Spaces persistent storage compatible structure
+- Media folders for uploaded images and videos
 
 ---
 
@@ -88,9 +103,9 @@ portfolio/
 │       ├── admin.rs
 │       ├── auth.rs
 │       ├── media.rs
+│       ├── portfolio_bot.rs
 │       ├── profile.rs
 │       ├── routes.rs
-│       ├── safety.rs
 │       └── storage.rs
 ├── frontend/
 │   └── src/
@@ -108,6 +123,8 @@ portfolio/
 ├── data/
 │   ├── profile/
 │   └── assets/
+├── Dockerfile
+├── Cargo.toml
 └── README.md
 ```
 
@@ -115,51 +132,60 @@ portfolio/
 
 ## Public Portfolio Sections
 
-The portfolio currently supports:
+The public portfolio currently includes:
 
 - Home / Profile
 - Projects
 - Skills
 - Certificates
 - Education
-- Contact / Social Links
+- Social Links
+- CV link
 - H7 Assistant
 
 ---
 
 ## Admin Panel
 
-The admin panel is intended for portfolio owner usage only.
+The admin panel is intended only for the portfolio owner.
 
 Admin capabilities include:
 
 - Update basic profile details
-- Upload and manage profile image
+- Manage profile image path
 - Add, update, delete, and reorder projects
-- Add project images
-- Update project links and chatbot-only notes
+- Add project images and media paths
+- Update project links and chatbot-only project details
 - Add, update, delete, and reorder certificates
 - Add, update, delete, and reorder education entries
 - Update skills and focus areas
 - Update contact and social links
 - Save changes to JSON profile storage
 
-The admin panel should not be linked visibly from the public portfolio. It should only be accessed through its private route and must remain protected by authentication.
+The admin panel is not linked from the public portfolio UI. It is available through a private route and protected with authentication.
+
+Admin sessions expire after one hour.
 
 ---
 
 ## H7 Assistant
 
-H7 Assistant is a portfolio-specific chatbot.
+H7 Assistant is a local portfolio-specific chatbot.
 
-It is designed to:
+It can answer about:
 
-- Answer only using the provided portfolio information
-- Explain projects, skills, certificates, education, and profile details
-- Avoid unrelated general-purpose chatbot behavior
-- Refuse or redirect questions when information is not available
-- Keep hidden/admin/internal data private
-- Present answers cleanly without unnecessary markdown symbols in UI
+- Profile summary
+- Projects
+- Project details
+- Skills
+- Certificates
+- Education
+- Focus areas
+- Contact and social links
+
+It is designed to answer only from the portfolio data. It does not act as a general-purpose chatbot and does not use external AI inference APIs.
+
+This avoids monthly inference credit issues and keeps chatbot responses fast, stable, and fully based on the portfolio JSON data.
 
 ---
 
@@ -169,16 +195,21 @@ Create a `.env` file for local development if needed.
 
 ```env
 PORT=7860
-HF_API_TOKEN=your_hugging_face_token
-HF_MODEL_ID=your_model_id
-PORTFOLIO_PROFILE_JSON=your_profile_json_if_not_using_data_file
+
 ADMIN_EMAIL=your_admin_email
 ADMIN_PASSWORD=your_admin_password
 ADMIN_SESSION_SECRET=minimum_32_characters_long_secret_value
-JWT_SECRET=your_jwt_secret
+
+PORTFOLIO_PROFILE_JSON=optional_profile_json_seed
 ```
 
 Do not commit real secrets to GitHub.
+
+Notes:
+
+- `ADMIN_SESSION_SECRET` must be at least 32 characters.
+- `PORTFOLIO_PROFILE_JSON` is optional.
+- `HF_API_TOKEN` and `HF_MODEL_ID` are not required for the local H7 Assistant.
 
 ---
 
@@ -223,29 +254,52 @@ Swagger UI:
 http://localhost:7860/swagger-ui
 ```
 
+Admin panel:
+
+```text
+http://localhost:7860/h7-admin
+```
+
+---
+
+## Build Checks
+
+Before committing major changes, run:
+
+```bash
+cargo fmt
+cargo check -p backend
+cd frontend
+npm run build
+```
+
+Then return to the root directory and run:
+
+```bash
+cargo run -p backend
+```
+
 ---
 
 ## Deployment Notes
 
-This project is designed to work on Hugging Face Spaces using the backend server to serve both the API and the built frontend.
+This project is designed to run on Hugging Face Spaces using Docker.
+
+The backend server serves:
+
+- API routes
+- Admin routes
+- Media files
+- Built frontend files from `frontend/dist`
 
 For deployment:
 
 1. Build the frontend.
-2. Run the Rust backend on the expected port.
-3. Configure required secrets in the hosting platform.
-4. Ensure profile JSON and media storage paths are correctly available.
-5. Test the public `.hf.space` link in desktop, mobile, and incognito mode.
-
----
-
-## Portfolio Link
-
-Add the final deployed portfolio link here:
-
-```text
-https://hashan-7-chamira-hashan.hf.space
-```
+2. Build the Rust backend.
+3. Run the backend on the expected `PORT`.
+4. Configure admin secrets in the hosting platform.
+5. Ensure profile JSON and media storage paths are available.
+6. Test the public `.hf.space` link on desktop, mobile, and incognito mode.
 
 ---
 
@@ -254,7 +308,7 @@ https://hashan-7-chamira-hashan.hf.space
 ```bash
 git checkout dev
 git add .
-git commit -m "Polish portfolio UI and admin data flow"
+git commit -m "Update portfolio project"
 git push origin dev
 ```
 
@@ -262,6 +316,7 @@ For final release:
 
 ```bash
 git checkout main
+git pull origin main
 git merge dev
 git push origin main
 ```
@@ -273,20 +328,24 @@ git push origin main
 Before sharing the portfolio link publicly, confirm:
 
 - Public page loads correctly
-- Mobile layout is clean
+- Mobile home layout is clean
 - Menu active section highlight works
 - Project carousel works
-- Project images are not stretched badly
+- Project images are displayed correctly
+- Skills ticker works
 - Certificates display correctly
 - Education section is clean
-- Social links open correctly
+- Social icons open the correct links
 - CV link works
 - H7 Assistant opens and closes correctly
-- Chatbot does not reveal hidden/admin/internal notes
+- H7 Assistant answers from local portfolio data
+- H7 Assistant does not reveal hidden/admin/internal fields
 - Admin route is not visible publicly
 - Admin login works
-- Profile image upload works
-- No broken links are shown publicly
+- Admin session expires after one hour
+- Admin save/update works
+- Media upload works
+- No broken public links are shown
 - No real secrets are committed
 
 ---
@@ -297,6 +356,6 @@ This project is created as a personal portfolio system for Chamira Hashan.
 
 <div align="center">
 
-**Developed by 💜 h7**  
+**Developed by 💜 h7**
 
 </div>
