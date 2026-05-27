@@ -4,6 +4,7 @@ export interface Certificate {
   year?: string;
   date?: string;
   link?: string;
+  image_path?: string;
 }
 
 export interface SocialLinks {

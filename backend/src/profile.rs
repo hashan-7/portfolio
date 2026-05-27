@@ -17,6 +17,8 @@ pub struct Certificate {
     pub date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub link: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_path: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, ToSchema, Default)]

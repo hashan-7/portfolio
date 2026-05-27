@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { uploadMedia } from '../../services/api';
 import type { Certificate, FullProfile } from '../../types';
 
 interface CertificatesFormProps {
@@ -13,17 +14,22 @@ const emptyCertificate: Certificate = {
   year: '',
   date: '',
   link: '',
+  image_path: '',
 };
 
 function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFormProps) {
   const certificates = profile.certificates ?? [];
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const safeSelectedIndex =
     certificates.length === 0 ? -1 : Math.min(selectedIndex, certificates.length - 1);
 
   const selectedCertificate =
     safeSelectedIndex >= 0 ? certificates[safeSelectedIndex] : null;
+
+  const selectedImagePath = selectedCertificate?.image_path?.trim() ?? '';
 
   const updateCertificates = (nextCertificates: Certificate[]) => {
     onChange({
@@ -46,6 +52,7 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
     const nextCertificates = [...certificates, { ...emptyCertificate }];
     updateCertificates(nextCertificates);
     setSelectedIndex(nextCertificates.length - 1);
+    setUploadError('');
   };
 
   const moveSelectedCertificate = (direction: 'up' | 'down') => {
@@ -84,8 +91,36 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
         const nextCertificates = certificates.filter((_, index) => index !== safeSelectedIndex);
         updateCertificates(nextCertificates);
         setSelectedIndex(Math.max(0, safeSelectedIndex - 1));
+        setUploadError('');
       },
     );
+  };
+
+  const handleCertificateImageUpload = async (file?: File) => {
+    if (!file || !selectedCertificate) {
+      return;
+    }
+
+    setIsUploadingImage(true);
+    setUploadError('');
+
+    try {
+      const uploadedFiles = await uploadMedia(file);
+      const imagePath = uploadedFiles[0];
+
+      if (!imagePath) {
+        throw new Error('Uploaded image path was not received.');
+      }
+
+      updateSelectedCertificate({
+        ...selectedCertificate,
+        image_path: imagePath,
+      });
+    } catch (error) {
+      setUploadError(error instanceof Error ? error.message : 'Failed to upload certificate image.');
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   return (
@@ -141,7 +176,10 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
             Select Certificate
             <select
               value={safeSelectedIndex}
-              onChange={(event) => setSelectedIndex(Number(event.target.value))}
+              onChange={(event) => {
+                setSelectedIndex(Number(event.target.value));
+                setUploadError('');
+              }}
             >
               {certificates.map((certificate, index) => (
                 <option key={`${certificate.name || 'certificate'}-${index}`} value={index}>
@@ -152,68 +190,131 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
           </label>
 
           {selectedCertificate && (
-            <div className="admin-form-grid">
-              <label>
-                Name
-                <input
-                  type="text"
-                  value={selectedCertificate.name ?? ''}
-                  onChange={(event) =>
-                    updateSelectedCertificate({
-                      ...selectedCertificate,
-                      name: event.target.value,
-                    })
-                  }
-                  placeholder="Certificate name"
-                />
-              </label>
+            <>
+              <div className="admin-certificate-image-panel">
+                <div className="admin-certificate-image-preview">
+                  {selectedImagePath ? (
+                    <img src={selectedImagePath} alt={selectedCertificate.name || 'Certificate preview'} />
+                  ) : (
+                    <span>Cert</span>
+                  )}
+                </div>
 
-              <label>
-                Issuer
-                <input
-                  type="text"
-                  value={selectedCertificate.issuer ?? ''}
-                  onChange={(event) =>
-                    updateSelectedCertificate({
-                      ...selectedCertificate,
-                      issuer: event.target.value,
-                    })
-                  }
-                  placeholder="Issuer"
-                />
-              </label>
+                <div>
+                  <label>
+                    Certificate Image Path
+                    <input
+                      type="text"
+                      value={selectedCertificate.image_path ?? ''}
+                      onChange={(event) =>
+                        updateSelectedCertificate({
+                          ...selectedCertificate,
+                          image_path: event.target.value,
+                        })
+                      }
+                      placeholder="/media/projects/images/certificate.png"
+                    />
+                  </label>
 
-              <label>
-                Date
-                <input
-                  type="text"
-                  value={selectedCertificate.date ?? selectedCertificate.year ?? ''}
-                  onChange={(event) =>
-                    updateSelectedCertificate({
-                      ...selectedCertificate,
-                      date: event.target.value,
-                      year: undefined,
-                    })
-                  }
-                  placeholder="May 20, 2026"
-                />
-              </label>
+                  <div className="admin-profile-image-actions">
+                    <label className="admin-file-button">
+                      {isUploadingImage ? 'Uploading...' : 'Upload Certificate Image'}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        disabled={isUploadingImage}
+                        onChange={(event) => {
+                          void handleCertificateImageUpload(event.target.files?.[0]);
+                          event.target.value = '';
+                        }}
+                      />
+                    </label>
 
-              <label>
-                Link
-                <input
-                  type="url"
-                  value={selectedCertificate.link ?? ''}
-                  onChange={(event) =>
-                    updateSelectedCertificate({
-                      ...selectedCertificate,
-                      link: event.target.value,
-                    })
-                  }
-                  placeholder="https://..."
-                />
-              </label>
-            </div>
+                    <button
+                      className="admin-secondary-button"
+                      type="button"
+                      onClick={() =>
+                        updateSelectedCertificate({
+                          ...selectedCertificate,
+                          image_path: '',
+                        })
+                      }
+                      disabled={!selectedImagePath || isUploadingImage}
+                    >
+                      Remove Image
+                    </button>
+                  </div>
+
+                  {uploadError && <p className="admin-error">{uploadError}</p>}
+                  <p className="admin-field-help">
+                    Keep certificate images small and clean. The public card will crop the image to a fixed preview size.
+                  </p>
+                </div>
+              </div>
+
+              <div className="admin-form-grid">
+                <label>
+                  Name
+                  <input
+                    type="text"
+                    value={selectedCertificate.name ?? ''}
+                    onChange={(event) =>
+                      updateSelectedCertificate({
+                        ...selectedCertificate,
+                        name: event.target.value,
+                      })
+                    }
+                    placeholder="Certificate name"
+                  />
+                </label>
+
+                <label>
+                  Issuer
+                  <input
+                    type="text"
+                    value={selectedCertificate.issuer ?? ''}
+                    onChange={(event) =>
+                      updateSelectedCertificate({
+                        ...selectedCertificate,
+                        issuer: event.target.value,
+                      })
+                    }
+                    placeholder="Issuer"
+                  />
+                </label>
+
+                <label>
+                  Date
+                  <input
+                    type="text"
+                    value={selectedCertificate.date ?? selectedCertificate.year ?? ''}
+                    onChange={(event) =>
+                      updateSelectedCertificate({
+                        ...selectedCertificate,
+                        date: event.target.value,
+                        year: undefined,
+                      })
+                    }
+                    placeholder="May 20, 2026"
+                  />
+                </label>
+
+                <label>
+                  Link
+                  <input
+                    type="url"
+                    value={selectedCertificate.link ?? ''}
+                    onChange={(event) =>
+                      updateSelectedCertificate({
+                        ...selectedCertificate,
+                        link: event.target.value,
+                      })
+                    }
+                    placeholder="https://..."
+                  />
+                </label>
+              </div>
+            </>
           )}
         </div>
       )}

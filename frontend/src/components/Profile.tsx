@@ -23,6 +23,8 @@ interface SocialItem {
   href: string;
 }
 
+const CERTIFICATES_PER_PAGE = 4;
+
 function padCount(value: number): string {
   return String(value).padStart(2, '0');
 }
@@ -57,6 +59,10 @@ function projectImages(project?: PublicProject): string[] {
     .map(mediaSource)
     .filter((path): path is string => Boolean(path))
     .slice(0, 3);
+}
+
+function certificateImage(certificate?: Certificate): string | undefined {
+  return mediaSource(certificate?.image_path);
 }
 
 function socialItems(socialLinks?: SocialLinks): SocialItem[] {
@@ -194,16 +200,23 @@ function Profile({ profile }: ProfileProps) {
   const [activeProjectIndex, setActiveProjectIndex] = useState(0);
   const [typedDescription, setTypedDescription] = useState('');
   const [projectImageIndex, setProjectImageIndex] = useState(0);
-  const [activeCertIndex, setActiveCertIndex] = useState(0);
-  const [leavingCertIndex, setLeavingCertIndex] = useState<number | null>(null);
+  const [activeCertPage, setActiveCertPage] = useState(0);
 
   const typeTimerRef = useRef<number | null>(null);
   const moveTimerRef = useRef<number | null>(null);
-  const certTimerRef = useRef<number | null>(null);
 
   const activeProject = projects[activeProjectIndex];
   const activeProjectImages = useMemo(() => projectImages(activeProject), [activeProject]);
   const activeProjectImage = activeProjectImages[projectImageIndex % Math.max(activeProjectImages.length, 1)];
+  const certificatePageCount = Math.max(1, Math.ceil(certificates.length / CERTIFICATES_PER_PAGE));
+  const visibleCertificates = useMemo(
+    () =>
+      certificates.slice(
+        activeCertPage * CERTIFICATES_PER_PAGE,
+        activeCertPage * CERTIFICATES_PER_PAGE + CERTIFICATES_PER_PAGE,
+      ),
+    [certificates, activeCertPage],
+  );
 
   const goToProject = (index: number) => {
     if (projects.length === 0) {
@@ -213,42 +226,12 @@ function Profile({ profile }: ProfileProps) {
     setActiveProjectIndex((index + projects.length) % projects.length);
   };
 
-  const goToCertificate = (index: number) => {
-    if (certificates.length === 0) {
+  const goToCertificatePage = (pageIndex: number) => {
+    if (certificatePageCount <= 1) {
       return;
     }
 
-    const nextIndex = (index + certificates.length) % certificates.length;
-
-    if (nextIndex === activeCertIndex) {
-      return;
-    }
-
-    setLeavingCertIndex(activeCertIndex);
-    setActiveCertIndex(nextIndex);
-    window.setTimeout(() => setLeavingCertIndex(null), 800);
-  };
-
-  const restartCertificateTimer = () => {
-    if (certTimerRef.current) {
-      window.clearInterval(certTimerRef.current);
-    }
-
-    if (certificates.length > 1) {
-      certTimerRef.current = window.setInterval(() => {
-        setActiveCertIndex((previousIndex) => {
-          const nextIndex = (previousIndex + 1) % certificates.length;
-          setLeavingCertIndex(previousIndex);
-          window.setTimeout(() => setLeavingCertIndex(null), 800);
-          return nextIndex;
-        });
-      }, 5000);
-    }
-  };
-
-  const handleManualCertificateChange = (index: number) => {
-    goToCertificate(index);
-    restartCertificateTimer();
+    setActiveCertPage((pageIndex + certificatePageCount) % certificatePageCount);
   };
 
   useEffect(() => {
@@ -377,29 +360,8 @@ function Profile({ profile }: ProfileProps) {
   }, [activeProjectImages.length, activeProjectIndex]);
 
   useEffect(() => {
-    if (certTimerRef.current) {
-      window.clearInterval(certTimerRef.current);
-    }
-
-    if (certificates.length <= 1) {
-      return undefined;
-    }
-
-    certTimerRef.current = window.setInterval(() => {
-      setActiveCertIndex((previousIndex) => {
-        const nextIndex = (previousIndex + 1) % certificates.length;
-        setLeavingCertIndex(previousIndex);
-        window.setTimeout(() => setLeavingCertIndex(null), 800);
-        return nextIndex;
-      });
-    }, 5000);
-
-    return () => {
-      if (certTimerRef.current) {
-        window.clearInterval(certTimerRef.current);
-      }
-    };
-  }, [certificates.length]);
+    setActiveCertPage((currentPage) => Math.min(currentPage, Math.max(0, certificatePageCount - 1)));
+  }, [certificatePageCount]);
 
   const navItems = [
     { id: 'home', label: 'Home' },
@@ -635,53 +597,63 @@ function Profile({ profile }: ProfileProps) {
             </div>
           </div>
 
-          <div className="certificate-book">
-            <div className="cert-stage">
-              {certificates.map((certificate: Certificate, index: number) => (
-                <article
-                  className={`cert-page ${activeCertIndex === index ? 'active' : ''} ${
-                    leavingCertIndex === index ? 'leaving' : ''
-                  }`}
-                  key={`${certificate.name ?? 'certificate'}-${index}`}
-                >
-                  <div className="cert-no">{padCount(index + 1)}</div>
+          <div className="certificate-grid-panel">
+            <div className="certificate-grid">
+              {visibleCertificates.map((certificate: Certificate, index: number) => {
+                const globalIndex = activeCertPage * CERTIFICATES_PER_PAGE + index;
+                const image = certificateImage(certificate);
 
-                  <div>
-                    {certificate.name && <h3>{certificate.name}</h3>}
-
-                    <div className="cert-meta">
-                      {certificate.issuer && <span>{certificate.issuer}</span>}
-                      {(certificate.date ?? certificate.year) && <span>{certificate.date ?? certificate.year}</span>}
+                return (
+                  <article className="cert-card" key={`${certificate.name ?? 'certificate'}-${globalIndex}`}>
+                    <div className={`cert-thumb ${image ? 'has-image' : ''}`}>
+                      {image ? (
+                        <img src={image} alt={`${certificate.name ?? 'Certificate'} preview`} loading="lazy" />
+                      ) : (
+                        <span>{padCount(globalIndex + 1)}</span>
+                      )}
                     </div>
 
-                    {certificate.link && (
-                      <a className="cert-view" href={certificate.link} target="_blank" rel="noreferrer">
-                        View Certificate ↗
-                      </a>
-                    )}
-                  </div>
-                </article>
-              ))}
+                    <div className="cert-body">
+                      <span className="cert-number">{padCount(globalIndex + 1)}</span>
+
+                      {certificate.name && <h3>{certificate.name}</h3>}
+
+                      <div className="cert-meta">
+                        {certificate.issuer && <span>{certificate.issuer}</span>}
+                        {(certificate.date ?? certificate.year) && <span>{certificate.date ?? certificate.year}</span>}
+                      </div>
+
+                      {certificate.link && (
+                        <a className="cert-view" href={certificate.link} target="_blank" rel="noreferrer">
+                          View Certificate ↗
+                        </a>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
 
             <div className="cert-controls">
-              <div className="cert-dots">
-                {certificates.map((certificate, index) => (
-                  <button
-                    className={`cert-dot ${activeCertIndex === index ? 'active' : ''}`}
-                    type="button"
-                    aria-label={`Open certificate ${index + 1}`}
-                    onClick={() => handleManualCertificateChange(index)}
-                    key={`${certificate.name ?? 'cert-dot'}-${index}`}
-                  />
-                ))}
+              <div className="cert-page-label">
+                Page {activeCertPage + 1} / {certificatePageCount}
               </div>
 
               <div className="circle-buttons">
-                <button className="circle-btn" type="button" onClick={() => handleManualCertificateChange(activeCertIndex - 1)}>
+                <button
+                  className="circle-btn"
+                  type="button"
+                  onClick={() => goToCertificatePage(activeCertPage - 1)}
+                  disabled={certificatePageCount <= 1}
+                >
                   ‹
                 </button>
-                <button className="circle-btn" type="button" onClick={() => handleManualCertificateChange(activeCertIndex + 1)}>
+                <button
+                  className="circle-btn"
+                  type="button"
+                  onClick={() => goToCertificatePage(activeCertPage + 1)}
+                  disabled={certificatePageCount <= 1}
+                >
                   ›
                 </button>
               </div>
