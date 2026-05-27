@@ -190,6 +190,7 @@ function Profile({ profile }: ProfileProps) {
   const profileImage = mediaSource(profile.profile_image_path);
 
   const [activeSection, setActiveSection] = useState('home');
+  const activeSectionRef = useRef('home');
   const [activeProjectIndex, setActiveProjectIndex] = useState(0);
   const [typedDescription, setTypedDescription] = useState('');
   const [projectImageIndex, setProjectImageIndex] = useState(0);
@@ -280,7 +281,10 @@ function Profile({ profile }: ProfileProps) {
         }
       }
 
-      setActiveSection(bestId);
+      if (bestId !== activeSectionRef.current) {
+        activeSectionRef.current = bestId;
+        setActiveSection(bestId);
+      }
     };
 
     let frameId = 0;
@@ -414,7 +418,10 @@ function Profile({ profile }: ProfileProps) {
               className={`nav-link ${activeSection === item.id ? 'active' : ''}`}
               href={`#${item.id}`}
               key={item.id}
-              onClick={() => setActiveSection(item.id)}
+              onClick={() => {
+                activeSectionRef.current = item.id;
+                setActiveSection(item.id);
+              }}
             >
               {item.label}
             </a>
@@ -455,17 +462,6 @@ function Profile({ profile }: ProfileProps) {
             </a>
           )}
 
-          <div className="hero-mini-counts">
-            <div>
-              <strong>{padCount(projects.length)}</strong>
-              <span>Projects</span>
-            </div>
-            <div>
-              <strong>{padCount(skills.length)}</strong>
-              <span>Tech Count</span>
-            </div>
-          </div>
-
           {profileSocialLinks.length > 0 && (
             <div className="social-only-row">
               {profileSocialLinks.map((item) => (
@@ -483,6 +479,28 @@ function Profile({ profile }: ProfileProps) {
               ))}
             </div>
           )}
+        </div>
+      </section>
+
+      <section className="about-snapshot glass" aria-label="About portfolio snapshot">
+        <div className="about-copy">
+          <p className="eyebrow section-only-title">About</p>
+          <h2>{displayName}</h2>
+          <p>
+            {profile.bio ??
+              'A practical software engineering portfolio focused on backend, AI/ML, full-stack, and mobile project work.'}
+          </p>
+        </div>
+
+        <div className="about-stats" aria-label="Portfolio quick counts">
+          <div>
+            <strong>{padCount(projects.length)}</strong>
+            <span>Projects</span>
+          </div>
+          <div>
+            <strong>{padCount(skills.length)}</strong>
+            <span>Tech Count</span>
+          </div>
         </div>
       </section>
 

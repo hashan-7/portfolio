@@ -169,7 +169,6 @@ function Chatbot() {
     setIsOpen(true);
 
     window.setTimeout(() => {
-      inputRef.current?.focus();
       scrollToBottom();
     }, 260);
   };
@@ -193,6 +192,22 @@ function Chatbot() {
 
     let index = 0;
 
+    const typingDelay = (character: string) => {
+      if (character === '\n') {
+        return 90;
+      }
+
+      if (/[.!?]/.test(character)) {
+        return 72;
+      }
+
+      if (/[,;:]/.test(character)) {
+        return 48;
+      }
+
+      return 24;
+    };
+
     const typeNext = () => {
       index += 1;
 
@@ -211,16 +226,15 @@ function Chatbot() {
       });
 
       if (index < safeReply.length) {
-        typingTimerRef.current = window.setTimeout(typeNext, 12);
+        typingTimerRef.current = window.setTimeout(typeNext, typingDelay(safeReply[index - 1] ?? ''));
         return;
       }
 
       setIsTypingReply(false);
       setIsWaiting(false);
-      window.setTimeout(() => inputRef.current?.focus(), 80);
     };
 
-    typingTimerRef.current = window.setTimeout(typeNext, 80);
+    typingTimerRef.current = window.setTimeout(typeNext, 160);
   };
 
   const handleSend = async (event: React.FormEvent<HTMLFormElement>) => {
