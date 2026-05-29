@@ -164,7 +164,7 @@ Admin capabilities include:
 
 The admin panel is not linked from the public portfolio UI. It is available through a private route and protected with authentication.
 
-Admin sessions expire after one hour..
+Admin sessions expire after one hour.
 
 ---
 
