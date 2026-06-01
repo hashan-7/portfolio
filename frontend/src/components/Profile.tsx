@@ -24,9 +24,19 @@ interface SocialItem {
 }
 
 const CERTIFICATES_PER_PAGE = 4;
+const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/+$/, '');
 
 function padCount(value: number): string {
   return String(value).padStart(2, '0');
+}
+
+function isAbsoluteMediaUrl(path: string): boolean {
+  return (
+    path.startsWith('http://') ||
+    path.startsWith('https://') ||
+    path.startsWith('data:') ||
+    path.startsWith('blob:')
+  );
 }
 
 function mediaSource(path?: string): string | undefined {
@@ -36,16 +46,17 @@ function mediaSource(path?: string): string | undefined {
     return undefined;
   }
 
-  if (
-    trimmed.startsWith('/') ||
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://') ||
-    trimmed.startsWith('data:')
-  ) {
+  if (isAbsoluteMediaUrl(trimmed)) {
     return trimmed;
   }
 
-  return `/${trimmed}`;
+  const normalizedPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+
+  if (apiBaseUrl) {
+    return `${apiBaseUrl}${normalizedPath}`;
+  }
+
+  return normalizedPath;
 }
 
 function projectImages(project?: PublicProject): string[] {
