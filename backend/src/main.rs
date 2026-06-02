@@ -5,6 +5,7 @@ pub mod auth;
 pub mod media;
 pub mod portfolio_bot;
 pub mod profile;
+pub mod rate_limit;
 pub mod routes;
 pub mod storage;
 

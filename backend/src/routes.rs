@@ -4,17 +4,14 @@ use axum::{
     Json, Router,
     extract::DefaultBodyLimit,
     http::{
-        header::{AUTHORIZATION, CONTENT_TYPE},
         HeaderValue, Method, StatusCode,
+        header::{AUTHORIZATION, CONTENT_TYPE},
     },
     middleware,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
-use tower_http::{
-    cors::CorsLayer,
-    services::{ServeDir, ServeFile},
-};
+use tower_http::{cors::CorsLayer, services::{ServeDir, ServeFile}};
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -26,7 +23,7 @@ use crate::{
     auth::auth_middleware,
     media, portfolio_bot,
     profile::{Certificate, Education, PublicProfile, PublicProject, SocialLinks},
-    storage,
+    rate_limit, storage,
 };
 
 const MAX_REQUEST_BODY_BYTES: usize = 25 * 1024 * 1024;
@@ -142,6 +139,10 @@ async fn profile_handler() -> Result<Json<PublicProfile>, (StatusCode, Json<Erro
 }
 
 fn admin_routes() -> Router {
+    let login_routes = Router::new()
+        .route("/login", post(login_handler))
+        .route_layer(middleware::from_fn(rate_limit::admin_login_rate_limit));
+
     let protected_routes = Router::new()
         .route("/verify", get(verify_admin_handler))
         .route(
@@ -149,11 +150,10 @@ fn admin_routes() -> Router {
             get(get_admin_profile_handler).put(update_admin_profile_handler),
         )
         .route("/media/upload", post(upload_media_handler))
-        .route_layer(middleware::from_fn(auth_middleware));
+        .route_layer(middleware::from_fn(auth_middleware))
+        .route_layer(middleware::from_fn(rate_limit::admin_rate_limit));
 
-    Router::new()
-        .route("/login", post(login_handler))
-        .merge(protected_routes)
+    login_routes.merge(protected_routes)
 }
 
 fn allowed_cors_origins() -> Vec<HeaderValue> {
@@ -195,10 +195,14 @@ pub fn create_router() -> Router {
     let frontend_serve_dir =
         ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html"));
 
+    let chat_routes = Router::new()
+        .route("/api/chat", post(chat_handler))
+        .route_layer(middleware::from_fn(rate_limit::chat_rate_limit));
+
     Router::new()
         .route("/health", get(health_check))
         .route("/api/profile", get(profile_handler))
-        .route("/api/chat", post(chat_handler))
+        .merge(chat_routes)
         .nest("/api/admin", admin_routes())
         .merge(media::create_media_router())
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
