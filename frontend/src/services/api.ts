@@ -12,6 +12,11 @@ interface AdminLoginResponse {
   expires_in_seconds?: number;
 }
 
+interface ApiErrorResponse {
+  error?: string;
+  message?: string;
+}
+
 function getStoredAdminExpiryMs(): number | null {
   const value = localStorage.getItem(ADMIN_TOKEN_EXPIRES_AT_KEY);
 
@@ -59,6 +64,25 @@ function getAuthHeaders() {
   };
 }
 
+async function getApiErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
+  if (response.status === 429) {
+    return 'Too many requests. Please wait a moment and try again.';
+  }
+
+  try {
+    const data = (await response.json()) as ApiErrorResponse;
+    const message = data.error?.trim() || data.message?.trim();
+
+    if (message) {
+      return message;
+    }
+  } catch {
+    return fallbackMessage;
+  }
+
+  return fallbackMessage;
+}
+
 export function logoutAdmin(): void {
   clearAdminToken();
 }
@@ -78,7 +102,7 @@ export async function getProfile(): Promise<PublicProfile> {
   const response = await fetch(`${API_BASE_URL}/api/profile`);
 
   if (!response.ok) {
-    throw new Error(`Failed to load profile data. Status: ${response.status}`);
+    throw new Error(await getApiErrorMessage(response, `Failed to load profile data. Status: ${response.status}`));
   }
 
   return response.json();
@@ -94,7 +118,7 @@ export async function sendChatMessage(history: ChatMessage[], scope = 'all'): Pr
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to send chat message. Status: ${response.status}`);
+    throw new Error(await getApiErrorMessage(response, `Failed to send chat message. Status: ${response.status}`));
   }
 
   const data = (await response.json()) as { reply?: string };
@@ -112,6 +136,11 @@ export async function loginAdmin(email: string, password: string): Promise<strin
 
   if (!response.ok) {
     clearAdminToken();
+
+    if (response.status === 429) {
+      throw new Error(await getApiErrorMessage(response, 'Too many login attempts. Please wait and try again.'));
+    }
+
     throw new Error('Invalid admin email or password.');
   }
 
@@ -167,7 +196,7 @@ export async function getAdminProfile(): Promise<FullProfile> {
   }
 
   if (!response.ok) {
-    throw new Error(`Failed to load admin profile. Status: ${response.status}`);
+    throw new Error(await getApiErrorMessage(response, `Failed to load admin profile. Status: ${response.status}`));
   }
 
   return response.json();
@@ -186,7 +215,7 @@ export async function updateAdminProfile(profile: FullProfile): Promise<void> {
   }
 
   if (!response.ok) {
-    throw new Error(`Failed to update profile. Status: ${response.status}`);
+    throw new Error(await getApiErrorMessage(response, `Failed to update profile. Status: ${response.status}`));
   }
 }
 
@@ -210,7 +239,7 @@ export async function uploadMedia(file: File): Promise<string[]> {
   }
 
   if (!response.ok) {
-    throw new Error(`Failed to upload media. Status: ${response.status}`);
+    throw new Error(await getApiErrorMessage(response, `Failed to upload media. Status: ${response.status}`));
   }
 
   const data = (await response.json()) as { files?: string[] };
