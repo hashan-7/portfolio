@@ -1,12 +1,18 @@
+use std::env;
+
 use axum::{
     Json, Router,
-    http::StatusCode,
+    extract::DefaultBodyLimit,
+    http::{
+        header::{AUTHORIZATION, CONTENT_TYPE},
+        HeaderValue, Method, StatusCode,
+    },
     middleware,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::CorsLayer,
     services::{ServeDir, ServeFile},
 };
 use utoipa::{OpenApi, ToSchema};
@@ -22,6 +28,8 @@ use crate::{
     profile::{Certificate, Education, PublicProfile, PublicProject, SocialLinks},
     storage,
 };
+
+const MAX_REQUEST_BODY_BYTES: usize = 25 * 1024 * 1024;
 
 #[derive(Serialize, ToSchema)]
 pub struct ErrorResponse {
@@ -148,11 +156,41 @@ fn admin_routes() -> Router {
         .merge(protected_routes)
 }
 
+fn allowed_cors_origins() -> Vec<HeaderValue> {
+    if let Ok(raw_origins) = env::var("ALLOWED_ORIGINS") {
+        let origins = raw_origins
+            .split(',')
+            .filter_map(|origin| {
+                let origin = origin.trim().trim_end_matches('/');
+
+                if origin.is_empty() {
+                    return None;
+                }
+
+                origin.parse::<HeaderValue>().ok()
+            })
+            .collect::<Vec<_>>();
+
+        if !origins.is_empty() {
+            return origins;
+        }
+    }
+
+    [
+        "https://chamirahashan.tech",
+        "https://www.chamirahashan.tech",
+        "https://chamira-hashan-portfolio.pages.dev",
+    ]
+    .into_iter()
+    .filter_map(|origin| origin.parse::<HeaderValue>().ok())
+    .collect()
+}
+
 pub fn create_router() -> Router {
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_origin(allowed_cors_origins())
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+        .allow_headers([CONTENT_TYPE, AUTHORIZATION]);
 
     let frontend_serve_dir =
         ServeDir::new("frontend/dist").fallback(ServeFile::new("frontend/dist/index.html"));
@@ -165,5 +203,6 @@ pub fn create_router() -> Router {
         .merge(media::create_media_router())
         .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
         .fallback_service(frontend_serve_dir)
+        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
         .layer(cors)
 }
