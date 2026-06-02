@@ -1,0 +1,6 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: DENY
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://hashan-7-chamira-hashan.hf.space data: blob:; media-src 'self' https://hashan-7-chamira-hashan.hf.space data: blob:; connect-src 'self' https://hashan-7-chamira-hashan.hf.space; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; upgrade-insecure-requests;
