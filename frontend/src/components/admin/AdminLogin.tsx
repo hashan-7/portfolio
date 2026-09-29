@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { loginAdmin, verifyAdminSession } from '../../services/api';
+import { useState } from 'react';
+import { loginAdmin, logoutAdmin } from '../../services/api';
 
 interface AdminLoginProps {
   onLoginSuccess?: () => void;
@@ -9,39 +9,7 @@ function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [isChecking, setIsChecking] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-
-    verifyAdminSession()
-      .then((valid) => {
-        if (!active) {
-          return;
-        }
-
-        if (valid) {
-          onLoginSuccess?.();
-        } else {
-          localStorage.removeItem('admin_token');
-        }
-      })
-      .catch(() => {
-        if (active) {
-          localStorage.removeItem('admin_token');
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setIsChecking(false);
-        }
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [onLoginSuccess]);
 
   const handleLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -58,16 +26,12 @@ function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
       await loginAdmin(email.trim(), password);
       onLoginSuccess?.();
     } catch (error) {
-      localStorage.removeItem('admin_token');
+      logoutAdmin();
       setErrorMessage(error instanceof Error ? error.message : 'Admin login failed.');
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  if (isChecking) {
-    return <div className="state-message">Checking admin session...</div>;
-  }
 
   return (
     <main className="admin-login-page">
@@ -94,6 +58,7 @@ function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
               onChange={(event) => setEmail(event.target.value)}
               placeholder="admin@email.com"
               autoComplete="email"
+              autoFocus
             />
           </label>
 
@@ -113,7 +78,7 @@ function AdminLogin({ onLoginSuccess }: AdminLoginProps) {
           </button>
         </form>
 
-        {errorMessage && <p className="admin-error">{errorMessage}</p>}
+        {errorMessage && <p className="admin-error" role="alert">{errorMessage}</p>}
 
         <p className="admin-field-help">
           This route is hidden from the public UI, but real authentication is still required.

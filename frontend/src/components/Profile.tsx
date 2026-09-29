@@ -1,707 +1,491 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Certificate, Education, PublicProfile, PublicProject, SocialLinks } from '../types';
-import { emailLink, formatExternalLink, phoneLink } from '../utils/links';
+import { useMemo, useState, type ReactNode } from 'react';
+import type { Certificate, Education, PublicProfile, PublicProject } from '../types';
+import { formatExternalLink } from '../utils/links';
+import { normalizeMediaPath } from '../utils/media';
+import { getSocialItems } from '../utils/social';
+import { useSectionSpy } from '../hooks/useSectionSpy';
+import ProjectMedia from './portfolio/ProjectMedia';
+import SocialLinks from './portfolio/SocialLinks';
 
 interface ProfileProps {
   profile: PublicProfile;
 }
 
-type SocialKey =
-  | 'github'
-  | 'linkedin'
-  | 'huggingface'
-  | 'kaggle'
-  | 'email'
-  | 'phone'
-  | 'resume'
-  | 'instagram'
-  | 'website';
+interface SectionHeadingProps {
+  number: string;
+  eyebrow: string;
+  title: string;
+  description?: string;
+}
 
-interface SocialItem {
-  key: SocialKey;
+interface CollectionPagerProps<T> {
+  items: T[];
   label: string;
-  href: string;
+  pageClassName: string;
+  renderItem: (item: T, absoluteIndex: number) => ReactNode;
+  viewportId: string;
 }
 
-const CERTIFICATES_PER_PAGE = 4;
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').trim().replace(/\/+$/, '');
+const COLLECTION_PAGE_SIZE = 4;
 
-function padCount(value: number): string {
-  return String(value).padStart(2, '0');
-}
-
-function isAbsoluteMediaUrl(path: string): boolean {
+function SectionHeading({ number, eyebrow, title, description }: SectionHeadingProps) {
   return (
-    path.startsWith('http://') ||
-    path.startsWith('https://') ||
-    path.startsWith('data:') ||
-    path.startsWith('blob:')
-  );
-}
-
-function mediaSource(path?: string): string | undefined {
-  const trimmed = path?.trim();
-
-  if (!trimmed) {
-    return undefined;
-  }
-
-  if (isAbsoluteMediaUrl(trimmed)) {
-    return trimmed;
-  }
-
-  const normalizedPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-
-  if (apiBaseUrl) {
-    return `${apiBaseUrl}${normalizedPath}`;
-  }
-
-  return normalizedPath;
-}
-
-function projectImages(project?: PublicProject): string[] {
-  if (!project) {
-    return [];
-  }
-
-  const paths = project.image_paths?.length ? project.image_paths : project.image_path ? [project.image_path] : [];
-
-  return paths
-    .map(mediaSource)
-    .filter((path): path is string => Boolean(path))
-    .slice(0, 3);
-}
-
-function certificateImage(certificate?: Certificate): string | undefined {
-  return mediaSource(certificate?.image_path);
-}
-
-function socialItems(socialLinks?: SocialLinks): SocialItem[] {
-  if (!socialLinks) {
-    return [];
-  }
-
-  const items: Array<SocialItem | undefined> = [
-    socialLinks.github
-      ? { key: 'github', label: 'GitHub', href: formatExternalLink(socialLinks.github) ?? socialLinks.github }
-      : undefined,
-    socialLinks.linkedin
-      ? { key: 'linkedin', label: 'LinkedIn', href: formatExternalLink(socialLinks.linkedin) ?? socialLinks.linkedin }
-      : undefined,
-    socialLinks.huggingface
-      ? {
-          key: 'huggingface',
-          label: 'Hugging Face',
-          href: formatExternalLink(socialLinks.huggingface) ?? socialLinks.huggingface,
-        }
-      : undefined,
-    socialLinks.kaggle
-      ? { key: 'kaggle', label: 'Kaggle', href: formatExternalLink(socialLinks.kaggle) ?? socialLinks.kaggle }
-      : undefined,
-    socialLinks.resume
-      ? { key: 'resume', label: 'CV', href: formatExternalLink(socialLinks.resume) ?? socialLinks.resume }
-      : undefined,
-    socialLinks.email ? { key: 'email', label: 'Email', href: emailLink(socialLinks.email) ?? socialLinks.email } : undefined,
-    socialLinks.phone ? { key: 'phone', label: 'Phone', href: phoneLink(socialLinks.phone) ?? socialLinks.phone } : undefined,
-    socialLinks.instagram
-      ? { key: 'instagram', label: 'Instagram', href: formatExternalLink(socialLinks.instagram) ?? socialLinks.instagram }
-      : undefined,
-    socialLinks.website
-      ? { key: 'website', label: 'Website', href: formatExternalLink(socialLinks.website) ?? socialLinks.website }
-      : undefined,
-  ];
-
-  return items.filter((item): item is SocialItem => Boolean(item));
-}
-
-function SocialIcon({ type }: { type: SocialKey }) {
-  if (type === 'resume') {
-    return <span className="cv-social-text">CV</span>;
-  }
-
-  if (type === 'github') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 .5a12 12 0 0 0-3.79 23.39c.6.11.82-.26.82-.58v-2.04c-3.34.73-4.04-1.42-4.04-1.42-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.2.08 1.84 1.24 1.84 1.24 1.07 1.83 2.8 1.3 3.48.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.53.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.65.25 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.63-5.48 5.93.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z" />
-      </svg>
-    );
-  }
-
-  if (type === 'linkedin') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM3 9h4v12H3V9Zm7 0h3.8v1.64h.05c.53-1 1.83-2.05 3.76-2.05 4.02 0 4.76 2.65 4.76 6.09V21h-4v-5.6c0-1.33-.02-3.05-1.86-3.05-1.86 0-2.14 1.45-2.14 2.95V21h-4V9Z" />
-      </svg>
-    );
-  }
-
-  if (type === 'huggingface') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M7.2 7.4a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Zm9.6 0a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2ZM12 22c5.2 0 9-3.6 9-8.5 0-2.4-.9-4.6-2.5-6.1-.2 1.8-1.6 3.1-3.4 3.1-1.2 0-2.3-.6-3-1.5-.7.9-1.8 1.5-3 1.5-1.8 0-3.2-1.3-3.4-3.1A8.4 8.4 0 0 0 3 13.5C3 18.4 6.8 22 12 22Zm-3.8-7.5c.8 1.4 2.1 2.1 3.8 2.1s3-.7 3.8-2.1c.3-.5 1-.6 1.5-.3s.6 1 .3 1.5c-1.2 2-3.1 3-5.6 3s-4.4-1-5.6-3c-.3-.5-.1-1.2.3-1.5.5-.3 1.2-.2 1.5.3Z" />
-      </svg>
-    );
-  }
-
-  if (type === 'kaggle') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M5 3h4v8.1L16.2 3H21l-7.8 8.5L21.5 21h-5.1L9 12.4V21H5V3Z" />
-      </svg>
-    );
-  }
-
-  if (type === 'email') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm9 7.4L4.7 7H4v.8l8 5.9 8-5.9V7h-.7L12 12.4Z" />
-      </svg>
-    );
-  }
-
-  if (type === 'phone') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M6.6 10.8c1.4 2.8 3.7 5.1 6.6 6.6l2.2-2.2c.3-.3.8-.4 1.2-.3 1.3.4 2.6.6 4 .6.7 0 1.2.5 1.2 1.2v3.6c0 .7-.5 1.2-1.2 1.2C10.4 22 2 13.6 2 3.2 2 2.5 2.5 2 3.2 2h3.6C7.5 2 8 2.5 8 3.2c0 1.4.2 2.8.6 4 .1.4 0 .9-.3 1.2l-1.7 2.4Z" />
-      </svg>
-    );
-  }
-
-  if (type === 'instagram') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5Zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7Zm5 4a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4Zm5.2-3.2a1 1 0 1 1 0 2 1 1 0 0 1 0-2Z" />
-      </svg>
-    );
-  }
-
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm6.9 9h-3.1a15.9 15.9 0 0 0-1.1-5 8.1 8.1 0 0 1 4.2 5ZM12 4.1c.7 1 1.3 2.8 1.6 4.9h-3.2C10.7 6.9 11.3 5.1 12 4.1ZM4.3 13h3.9c.1 1.7.4 3.3.9 4.6A8 8 0 0 1 4.3 13Zm3.9-2H4.3a8 8 0 0 1 4.8-4.6A17 17 0 0 0 8.2 11Zm3.8 8.9c-.7-1-1.3-2.8-1.6-4.9h3.2c-.3 2.1-.9 3.9-1.6 4.9ZM14 13h-4v-2h4v2Zm.9 4.6c.5-1.3.8-2.9.9-4.6h3.9a8 8 0 0 1-4.8 4.6Z" />
-    </svg>
-  );
-}
-
-function SectionCounter({ count, label }: { count: number; label: string }) {
-  return (
-    <div className="section-counter">
+    <header className="section-heading">
       <div>
-        {padCount(count)}
-        <small>{label}</small>
+        <span className="section-number">{number}</span>
+        <p className="eyebrow">{eyebrow}</p>
+      </div>
+      <div>
+        <h2>{title}</h2>
+        {description && <p>{description}</p>}
+      </div>
+    </header>
+  );
+}
+
+function CollectionPager<T>({
+  items,
+  label,
+  pageClassName,
+  renderItem,
+  viewportId,
+}: CollectionPagerProps<T>) {
+  const [page, setPage] = useState(0);
+  const [direction, setDirection] = useState<'forward' | 'backward'>('forward');
+  const pageCount = Math.max(1, Math.ceil(items.length / COLLECTION_PAGE_SIZE));
+  const safePage = Math.min(page, pageCount - 1);
+  const startIndex = safePage * COLLECTION_PAGE_SIZE;
+  const endIndex = Math.min(startIndex + COLLECTION_PAGE_SIZE, items.length);
+  const visibleItems = items.slice(startIndex, endIndex);
+
+  const showPage = (nextPage: number) => {
+    const safeNextPage = Math.min(Math.max(nextPage, 0), pageCount - 1);
+    if (safeNextPage === safePage) return;
+
+    setDirection(safeNextPage > safePage ? 'forward' : 'backward');
+    setPage(safeNextPage);
+  };
+
+  return (
+    <div className="collection-frame">
+      <div className="collection-toolbar">
+        <p className="collection-range" aria-live="polite">
+          <span>{String(startIndex + 1).padStart(2, '0')}—{String(endIndex).padStart(2, '0')}</span>
+          <small>{label} / {String(items.length).padStart(2, '0')}</small>
+        </p>
+
+        {pageCount > 1 && (
+          <div className="collection-navigation" aria-label={`${label} navigation`}>
+            <button
+              type="button"
+              onClick={() => showPage(safePage - 1)}
+              disabled={safePage === 0}
+              aria-label={`Show previous ${label.toLowerCase()}`}
+              aria-controls={viewportId}
+            >
+              <span aria-hidden="true">←</span>
+            </button>
+
+            <span className="collection-progress" aria-hidden="true">
+              {Array.from({ length: pageCount }, (_, index) => (
+                <i className={index === safePage ? 'active' : ''} key={index} />
+              ))}
+            </span>
+
+            <span className="sr-only">Page {safePage + 1} of {pageCount}</span>
+
+            <button
+              type="button"
+              onClick={() => showPage(safePage + 1)}
+              disabled={safePage === pageCount - 1}
+              aria-label={`Show next ${label.toLowerCase()}`}
+              aria-controls={viewportId}
+            >
+              <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="collection-viewport" id={viewportId}>
+        <div
+          className={`${pageClassName} collection-page`}
+          data-direction={direction}
+          key={`${label}-${safePage}`}
+        >
+          {visibleItems.map((item, index) => renderItem(item, startIndex + index))}
+        </div>
       </div>
     </div>
   );
 }
 
+function ProjectLinks({ project }: { project: PublicProject }) {
+  const links = [
+    { label: 'GitHub', href: formatExternalLink(project.github_link) },
+    { label: 'Hugging Face', href: formatExternalLink(project.hf_link) },
+    { label: 'Live demo', href: formatExternalLink(project.live_demo_link) },
+  ].filter((link): link is { label: string; href: string } => Boolean(link.href));
+
+  if (links.length === 0) return null;
+
+  return (
+    <div className="project-actions">
+      {links.map((link) => (
+        <a href={link.href} target="_blank" rel="noreferrer" key={link.label}>
+          {link.label}
+          <span aria-hidden="true">↗</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function CertificateCard({ certificate, index }: { certificate: Certificate; index: number }) {
+  const image = normalizeMediaPath(certificate.image_path);
+  const link = formatExternalLink(certificate.link);
+
+  return (
+    <article className="credential-card">
+      <div className="credential-visual">
+        {image ? (
+          <img
+            src={image}
+            alt={`${certificate.name ?? 'Certificate'} preview`}
+            loading="lazy"
+            decoding="async"
+          />
+        ) : (
+          <span>{String(index + 1).padStart(2, '0')}</span>
+        )}
+      </div>
+      <div className="credential-copy">
+        <span className="credential-index">CERT / {String(index + 1).padStart(2, '0')}</span>
+        <h3>{certificate.name ?? 'Certificate'}</h3>
+        <p>{[certificate.issuer, certificate.date ?? certificate.year].filter(Boolean).join(' · ')}</p>
+        {link && (
+          <a href={link} target="_blank" rel="noreferrer">
+            View credential <span aria-hidden="true">↗</span>
+          </a>
+        )}
+      </div>
+    </article>
+  );
+}
+
+function EducationCard({ education, index }: { education: Education; index: number }) {
+  const link = formatExternalLink(education.link);
+
+  return (
+    <article className="education-card">
+      <span className="education-marker" aria-hidden="true" />
+      <div className="education-date">{education.duration ?? education.year ?? `Entry ${index + 1}`}</div>
+      <div>
+        <h3>{education.degree ?? education.institution ?? `Education ${index + 1}`}</h3>
+        <p className="education-institution">{education.institution}</p>
+        <p>{[education.grade, education.status].filter(Boolean).join(' · ')}</p>
+        {link && (
+          <a href={link} target="_blank" rel="noreferrer">
+            View details <span aria-hidden="true">↗</span>
+          </a>
+        )}
+      </div>
+    </article>
+  );
+}
 function Profile({ profile }: ProfileProps) {
-  const skills = profile.skills ?? [];
+  const displayName = profile.display_name ?? profile.name ?? 'Chamira Hashan';
   const projects = profile.projects ?? [];
+  const skills = profile.skills ?? [];
+  const focusAreas = profile.focus_areas ?? [];
   const certificates = profile.certificates ?? [];
   const education = profile.education ?? [];
-  const socialLinks = socialItems(profile.social_links);
-  const resumeItem = socialLinks.find((item) => item.key === 'resume');
-  const profileSocialLinks = socialLinks.filter((item) => item.key !== 'resume');
-  const displayName = profile.display_name ?? profile.name ?? 'Chamira Hashan';
-  const role = profile.role ?? '';
-  const tagline = profile.tagline ?? 'Building practical backend, AI/ML, and full-stack software projects.';
-  const profileImage = mediaSource(profile.profile_image_path);
+  const socialItems = getSocialItems(profile.social_links);
+  const resume = socialItems.find((item) => item.key === 'resume');
+  const profileImage = normalizeMediaPath(profile.profile_image_path);
+  const displayBio = profile.bio?.replace(/\bgraduate\b/gi, 'undergraduate');
 
-  const [activeSection, setActiveSection] = useState('home');
-  const activeSectionRef = useRef('home');
-  const [activeProjectIndex, setActiveProjectIndex] = useState(0);
-  const [typedDescription, setTypedDescription] = useState('');
-  const [projectImageIndex, setProjectImageIndex] = useState(0);
-  const [activeCertPage, setActiveCertPage] = useState(0);
+  const navItems = useMemo(
+    () => [
 
-  const typeTimerRef = useRef<number | null>(null);
-  const moveTimerRef = useRef<number | null>(null);
-
-  const activeProject = projects[activeProjectIndex];
-  const activeProjectImages = useMemo(() => projectImages(activeProject), [activeProject]);
-  const activeProjectImage = activeProjectImages[projectImageIndex % Math.max(activeProjectImages.length, 1)];
-  const certificatePageCount = Math.max(1, Math.ceil(certificates.length / CERTIFICATES_PER_PAGE));
-  const visibleCertificates = useMemo(
-    () =>
-      certificates.slice(
-        activeCertPage * CERTIFICATES_PER_PAGE,
-        activeCertPage * CERTIFICATES_PER_PAGE + CERTIFICATES_PER_PAGE,
-      ),
-    [certificates, activeCertPage],
+{ id: 'home', label: 'Home', visible: true },
+      { id: 'about', label: 'Focus', visible: Boolean(profile.bio || focusAreas.length) },
+      { id: 'projects', label: 'Work', visible: projects.length > 0 },
+      { id: 'skills', label: 'Skills', visible: skills.length > 0 },
+      { id: 'certificates', label: 'Credentials', visible: certificates.length > 0 },
+      { id: 'education', label: 'Education', visible: education.length > 0 },
+      { id: 'contact', label: 'Contact', visible: socialItems.length > 0 },
+    ].filter((item) => item.visible),
+    [
+      certificates.length,
+      education.length,
+      focusAreas.length,
+      profile.bio,
+      projects.length,
+      skills.length,
+      socialItems.length,
+    ],
   );
 
-  const goToProject = (index: number) => {
-    if (projects.length === 0) {
-      return;
-    }
-
-    setActiveProjectIndex((index + projects.length) % projects.length);
-  };
-
-  const goToCertificatePage = (pageIndex: number) => {
-    if (certificatePageCount <= 1) {
-      return;
-    }
-
-    setActiveCertPage((pageIndex + certificatePageCount) % certificatePageCount);
-  };
-
-  useEffect(() => {
-    const sectionIds = ['home', 'projects', 'skills', 'certificates', 'education'];
-
-    const getCurrentSection = () => {
-      const markerY = window.innerHeight * 0.3;
-      let bestId = 'home';
-      let bestDistance = Number.POSITIVE_INFINITY;
-
-      for (const id of sectionIds) {
-        const section = document.getElementById(id);
-
-        if (!section) {
-          continue;
-        }
-
-        const rect = section.getBoundingClientRect();
-
-        if (rect.top <= markerY && rect.bottom >= markerY) {
-          bestId = id;
-          break;
-        }
-
-        const distance = Math.abs(rect.top - markerY);
-
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestId = id;
-        }
-      }
-
-      if (bestId !== activeSectionRef.current) {
-        activeSectionRef.current = bestId;
-        setActiveSection(bestId);
-      }
-    };
-
-    let frameId = 0;
-
-    const onScrollOrResize = () => {
-      if (frameId) {
-        return;
-      }
-
-      frameId = window.requestAnimationFrame(() => {
-        frameId = 0;
-        getCurrentSection();
-      });
-    };
-
-    getCurrentSection();
-    window.addEventListener('scroll', onScrollOrResize, { passive: true });
-    window.addEventListener('resize', onScrollOrResize);
-
-    return () => {
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
-      }
-
-      window.removeEventListener('scroll', onScrollOrResize);
-      window.removeEventListener('resize', onScrollOrResize);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeTimerRef.current) {
-      window.clearTimeout(typeTimerRef.current);
-    }
-
-    if (moveTimerRef.current) {
-      window.clearTimeout(moveTimerRef.current);
-    }
-
-    const description = activeProject?.short_description ?? '';
-
-    if (!description) {
-      setTypedDescription('');
-      return undefined;
-    }
-
-    let currentIndex = 0;
-    setTypedDescription('');
-
-    const typeNext = () => {
-      currentIndex += 1;
-      setTypedDescription(description.slice(0, currentIndex));
-
-      if (currentIndex < description.length) {
-        typeTimerRef.current = window.setTimeout(typeNext, 38);
-        return;
-      }
-
-      moveTimerRef.current = window.setTimeout(() => {
-        setActiveProjectIndex((previousIndex) =>
-          projects.length > 0 ? (previousIndex + 1) % projects.length : 0,
-        );
-      }, 7000);
-    };
-
-    typeTimerRef.current = window.setTimeout(typeNext, 220);
-
-    return () => {
-      if (typeTimerRef.current) {
-        window.clearTimeout(typeTimerRef.current);
-      }
-
-      if (moveTimerRef.current) {
-        window.clearTimeout(moveTimerRef.current);
-      }
-    };
-  }, [activeProject?.short_description, projects.length]);
-
-  useEffect(() => {
-    setProjectImageIndex(0);
-
-    if (activeProjectImages.length <= 1) {
-      return undefined;
-    }
-
-    const imageTimer = window.setInterval(() => {
-      setProjectImageIndex((previousIndex) => (previousIndex + 1) % activeProjectImages.length);
-    }, 1200);
-
-    return () => window.clearInterval(imageTimer);
-  }, [activeProjectImages.length, activeProjectIndex]);
-
-  useEffect(() => {
-    setActiveCertPage((currentPage) => Math.min(currentPage, Math.max(0, certificatePageCount - 1)));
-  }, [certificatePageCount]);
-
-  const navItems = [
-    { id: 'home', label: 'Home' },
-    { id: 'projects', label: 'Projects' },
-    { id: 'skills', label: 'Skills' },
-    { id: 'certificates', label: 'Certificates' },
-    { id: 'education', label: 'Education' },
-  ];
+  const sectionIds = useMemo(() => navItems.map((item) => item.id), [navItems]);
+  const activeSection = useSectionSpy(sectionIds);
 
   return (
     <main className="portfolio-page">
-      <div className="top-nav-wrap">
-        <nav className="top-nav" aria-label="Portfolio sections">
-          {navItems.map((item) => (
-            <a
-              className={`nav-link ${activeSection === item.id ? 'active' : ''}`}
-              href={`#${item.id}`}
-              key={item.id}
-              onClick={() => {
-                activeSectionRef.current = item.id;
-                setActiveSection(item.id);
-              }}
-            >
-              {item.label}
-            </a>
-          ))}
+      <div className="ambient-signal-field" aria-hidden="true">
+        <span className="ambient-orbit ambient-orbit-north" />
+        <span className="ambient-orbit ambient-orbit-south" />
+        <span className="ambient-scan" />
+      </div>
+
+      <a className="skip-link" href="#portfolio-content">Skip to content</a>
+
+      <div className="site-nav-wrap">
+        <nav className="site-nav" aria-label="Portfolio sections">
+          <a className="site-mark" href="#home" aria-label={`${displayName} home`}>H7</a>
+          <div className="site-nav-links">
+            {navItems.map((item) => (
+              <a
+                className={activeSection === item.id ? 'active' : ''}
+                href={`#${item.id}`}
+                aria-current={activeSection === item.id ? 'location' : undefined}
+                key={item.id}
+              >
+                {item.label}
+              </a>
+            ))}
+          </div>
         </nav>
       </div>
 
-      <section className="hero" id="home">
-        <div className="hero-mobile-frame">
-          <div className="hero-content">
-            <div className="hero-kicker">{displayName}</div>
+      <div id="portfolio-content">
+        <section className="hero-section" id="home">
+          <div className="hero-copy">
+            <p className="hero-overline">Software engineering / AI &amp; ML</p>
+            <h1>
+              <span>{displayName}</span>
+              {profile.tagline ?? 'Building practical software with disciplined engineering.'}
+            </h1>
+            {profile.role && <p className="hero-role">{profile.role}</p>}
+            {profile.location && <p className="hero-location">Based in {profile.location}</p>}
 
-            <h1>{tagline}</h1>
+            {focusAreas.length > 0 && (
+              <ul className="focus-list" aria-label="Professional focus areas">
+                {focusAreas.slice(0, 4).map((focus) => <li key={focus}>{focus}</li>)}
+              </ul>
+            )}
 
-            {role && <p className="hero-role">{role}</p>}
-            {profile.location && <p className="profile-location">{profile.location}</p>}
-          </div>
+            <div className="hero-actions">
+              {projects.length > 0 && <a className="primary-action" href="#projects">View selected work</a>}
+              {resume && (
+                <a className="secondary-action" href={resume.href} target="_blank" rel="noreferrer">
 
-          <div className="hero-visual">
-            <div className={`portrait-card ${profileImage ? 'has-photo' : ''}`}>
-              {profileImage && <img className="profile-photo" src={profileImage} alt={`${displayName} profile`} />}
-              <div className="portrait-fallback">H7</div>
-              <div className="status-dot">✦</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="hero-mobile-actions">
-          {resumeItem && (
-            <a
-              className="download-cv-button"
-              href={resumeItem.href}
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Download CV"
-            >
-              Download CV
-            </a>
-          )}
-
-          {profileSocialLinks.length > 0 && (
-            <div className="social-only-row">
-              {profileSocialLinks.map((item) => (
-                <a
-                  className="social-only"
-                  href={item.href}
-                  target={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : '_blank'}
-                  rel={item.href.startsWith('mailto:') || item.href.startsWith('tel:') ? undefined : 'noreferrer'}
-                  aria-label={item.label}
-                  title={item.label}
-                  key={item.key}
-                >
-                  <SocialIcon type={item.key} />
+View CV <span aria-hidden="true">↗</span>
                 </a>
-              ))}
+              )}
             </div>
-          )}
-        </div>
-      </section>
 
-      <section className="about-snapshot glass" aria-label="About portfolio snapshot">
-        <div className="about-copy">
-          <p className="eyebrow section-only-title">About</p>
-          <h2>{displayName}</h2>
-          <p>
-            {profile.bio ??
-              'A practical software engineering portfolio focused on backend, AI/ML, full-stack, and mobile project work.'}
-          </p>
-        </div>
-
-        <div className="about-stats" aria-label="Portfolio quick counts">
-          <div>
-            <strong>{padCount(projects.length)}</strong>
-            <span>Projects</span>
+            <SocialLinks items={socialItems} exclude={['resume']} className="hero-social-links" />
           </div>
-          <div>
-            <strong>{padCount(skills.length)}</strong>
-            <span>Tech Count</span>
-          </div>
-        </div>
-      </section>
 
-      {projects.length > 0 && activeProject && (
-        <section className="section glass" id="projects">
-          <div className="section-header compact">
-            <div className="section-title-wrap">
-              <SectionCounter count={projects.length} label="WORK" />
-              <p className="eyebrow section-only-title">Projects</p>
+          <div className={`portrait-frame ${profileImage ? 'has-image' : ''}`}>
+            <div className="portrait-grid" aria-hidden="true" />
+            {profileImage ? (
+              <img
+                src={profileImage}
+                alt={`${displayName} portrait`}
+                width="720"
+                height="900"
+                decoding="async"
+                fetchPriority="high"
+              />
+            ) : (
+              <span className="portrait-monogram" aria-label={`${displayName} portrait placeholder`}>H7</span>
+            )}
+          </div>
+        </section>
+        {(profile.bio || focusAreas.length > 0) && (
+          <section className="portfolio-section about-section" id="about">
+            <SectionHeading
+              number="02"
+              eyebrow="Professional focus"
+              title="Turning requirements into dependable, usable systems."
+              description="A practical engineering profile grounded in clear boundaries, maintainable implementation, evidence-led iteration, and delivery-aware decisions."
+            />
+            <div className="about-layout">
+              <div className="about-narrative">
+                <p className="about-label">Engineering profile / current trajectory</p>
+                <p className="about-lead">
+                  {displayBio ?? 'A practical software engineering portfolio spanning backend, AI/ML, full-stack, and mobile work.'}
+                </p>
+                <p className="about-approach">
+                  My approach connects system design, implementation, validation, and deployment into one deliberate delivery process—keeping the result useful, explainable, and maintainable.
+                </p>
+              </div>
+
+              <div className="focus-system">
+                <header>
+                  <span>Current direction</span>
+                  <small>Capability signals</small>
+                </header>
+                <div className="focus-grid">
+                  {focusAreas.map((focus, index) => (
+                    <article key={focus}>
+                      <span>{String(index + 1).padStart(2, '0')}</span>
+                      <h3>{focus}</h3>
+                      <i aria-hidden="true" />
+                    </article>
+                  ))}
+                </div>
+              </div>
+
+              <div className="delivery-principles">
+                <p>Delivery principles</p>
+                <ul>
+                  <li><span>01</span><strong>Clear system boundaries</strong></li>
+                  <li><span>02</span><strong>Evidence-led iteration</strong></li>
+                  <li><span>03</span><strong>Production-aware delivery</strong></li>
+                </ul>
+              </div>
+
+              <dl className="portfolio-counts">
+                <div><dt>Projects</dt><dd>{String(projects.length).padStart(2, '0')}</dd></div>
+                <div><dt>Technologies</dt><dd>{String(skills.length).padStart(2, '0')}</dd></div>
+                <div><dt>Credentials</dt><dd>{String(certificates.length).padStart(2, '0')}</dd></div>
+              </dl>
             </div>
-          </div>
+          </section>
+        )}
 
-          <div className="project-carousel">
-            <div className="project-track" style={{ transform: `translateX(-${activeProjectIndex * 100}%)` }}>
-              {projects.map((project, index) => {
-                const images = projectImages(project);
-                const visibleImage =
-                  index === activeProjectIndex ? activeProjectImage : images.length > 0 ? images[0] : undefined;
-                const videoSource = mediaSource(project.video_path);
-
-                return (
-                  <article className="project-slide" key={`${project.title ?? 'project'}-${index}`}>
-                    <div className="project-card">
-                      <div className="project-info">
-                        <span className="project-index">{padCount(index + 1)}</span>
-                        {project.title && <h3>{project.title}</h3>}
-
-                        <p className="project-description">
-                          {index === activeProjectIndex ? typedDescription : project.short_description}
-                          {index === activeProjectIndex && typedDescription.length < (project.short_description ?? '').length && (
-                            <span className="cursor">|</span>
-                          )}
-                        </p>
-
-                        {project.tech_stack.length > 0 && (
-                          <div className="project-tags">
-                            {project.tech_stack.slice(0, 6).map((tech) => (
-                              <span key={`${project.title}-${tech}`}>{tech}</span>
-                            ))}
-                          </div>
-                        )}
-
-                        <div className="project-links">
-                          {project.github_link && (
-                            <a className="project-link" href={project.github_link} target="_blank" rel="noreferrer">
-                              GitHub ↗
-                            </a>
-                          )}
-
-                          {project.hf_link && (
-                            <a className="project-link" href={project.hf_link} target="_blank" rel="noreferrer">
-                              HF Space ↗
-                            </a>
-                          )}
-
-                          {project.live_demo_link && (
-                            <a className="project-link" href={project.live_demo_link} target="_blank" rel="noreferrer">
-                              Live Demo ↗
-                            </a>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="project-visual">
-                        {videoSource ? (
-                          <video src={videoSource} autoPlay muted loop playsInline />
-                        ) : visibleImage ? (
-                          <img src={visibleImage} alt={project.title ?? 'Project preview'} />
-                        ) : (
-                          <div className="project-shot active" />
-                        )}
-                      </div>
+        {projects.length > 0 && (
+          <section className="portfolio-section projects-section" id="projects">
+            <SectionHeading
+              number="03"
+              eyebrow="Selected work"
+              title="Projects built to solve, learn, and ship."
+              description="Each project is presented from the live portfolio dataset, with its available code, demo, and media evidence."
+            />
+            <CollectionPager
+              items={projects}
+              label="Projects"
+              pageClassName="project-list project-page"
+              viewportId="project-collection"
+              renderItem={(project, index) => (
+                <article
+                  className={`project-story ${project.featured ? 'featured' : ''}`}
+                  key={`${project.title ?? 'project'}-${index}`}
+                >
+                  <div className="project-copy">
+                    <div className="project-meta">
+                      <span>PROJECT / {String(index + 1).padStart(2, '0')}</span>
+                      {project.category && <span>{project.category}</span>}
+                      {project.featured && <span className="featured-label">Featured</span>}
                     </div>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
+                    <h3>{project.title ?? `Project ${index + 1}`}</h3>
+                    {project.short_description && <p>{project.short_description}</p>}
+                    {project.tech_stack.length > 0 && (
+                      <ul className="technology-list" aria-label={`${project.title ?? 'Project'} technologies`}>
+                        {project.tech_stack.map((technology) => <li key={technology}>{technology}</li>)}
+                      </ul>
+                    )}
+                    <ProjectLinks project={project} />
+                  </div>
+                  <ProjectMedia project={project} />
+                </article>
+              )}
+            />
+          </section>
+        )}
 
-          <div className="project-controls">
-            <div className="dots">
-              {projects.map((project, index) => (
-                <button
-                  className={`dot ${activeProjectIndex === index ? 'active' : ''}`}
-                  type="button"
-                  aria-label={`Open project ${index + 1}`}
-                  onClick={() => goToProject(index)}
-                  key={`${project.title ?? 'project-dot'}-${index}`}
+        {skills.length > 0 && (
+          <section className="portfolio-section skills-section" id="skills">
+            <SectionHeading
+              number="04"
+              eyebrow="Technical stack"
+              title="A capability system, not a checklist."
+              description="Technologies connected across software delivery, backend systems, applied AI, data, and production tooling—selected according to the problem and its constraints."
+            />
+            <div className="skills-system">
+              <header className="skills-system-header">
+                <div className="skills-orbit" aria-hidden="true">
+                  <i />
+                  <span>{String(skills.length).padStart(2, '0')}</span>
+                </div>
+                <div>
+                  <p className="eyebrow">Capability map</p>
+                  <p>One working system spanning implementation, intelligence, data, and delivery.</p>
+                </div>
+              </header>
+
+              <ul className="skills-constellation" aria-label="Technical skills">
+                {skills.map((skill, index) => (
+                  <li key={skill}>
+                    <span className="skill-index">{String(index + 1).padStart(2, '0')}</span>
+                    <div>
+                      <small>Capability</small>
+                      <strong>{skill}</strong>
+                    </div>
+                    <i className="skill-signal" aria-hidden="true" />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
+
+        {certificates.length > 0 && (
+          <section className="portfolio-section credentials-section" id="certificates">
+            <SectionHeading
+              number="05"
+              eyebrow="Credentials"
+              title="Verified learning, presented without noise."
+            />
+            <CollectionPager
+              items={certificates}
+              label="Certificates"
+              pageClassName="credential-grid"
+              viewportId="certificate-collection"
+              renderItem={(certificate, index) => (
+                <CertificateCard
+                  certificate={certificate}
+                  index={index}
+                  key={`${certificate.name ?? 'certificate'}-${index}`}
+                />
+              )}
+            />
+          </section>
+        )}
+
+        {education.length > 0 && (
+          <section className="portfolio-section education-section" id="education">
+            <SectionHeading number="06" eyebrow="Education" title="A foundation for continuous practice." />
+            <div className="education-list">
+
+{education.map((item, index) => (
+                <EducationCard
+                  education={item}
+                  index={index}
+                  key={`${item.institution ?? 'education'}-${index}`}
                 />
               ))}
             </div>
+          </section>
+        )}
 
-            <div className="circle-buttons">
-              <button className="circle-btn" type="button" onClick={() => goToProject(activeProjectIndex - 1)}>
-                ‹
-              </button>
-              <button className="circle-btn" type="button" onClick={() => goToProject(activeProjectIndex + 1)}>
-                ›
-              </button>
+        {socialItems.length > 0 && (
+          <section className="portfolio-section contact-section" id="contact">
+            <div>
+              <p className="eyebrow">Contact / Connect</p>
+              <h2>Continue the conversation.</h2>
+              <p>Use any available public channel below to explore the work or get in touch.</p>
             </div>
-          </div>
-        </section>
-      )}
-
-      {skills.length > 0 && (
-        <section className="section glass" id="skills">
-          <div className="section-header compact">
-            <p className="eyebrow section-only-title">Skills</p>
-          </div>
-
-          <div className="skills-marquee">
-            <div className="skills-track">
-              {[...skills, ...skills].map((skill, index) => (
-                <span
-                  className={`skill-pill ${index % skills.length < 3 ? 'featured' : ''}`}
-                  key={`${skill}-${index}`}
-                >
-                  {skill}
-                </span>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {certificates.length > 0 && (
-        <section className="section glass" id="certificates">
-          <div className="section-header compact">
-            <div className="section-title-wrap">
-              <SectionCounter count={certificates.length} label="CERT" />
-              <p className="eyebrow section-only-title">Certificates</p>
-            </div>
-          </div>
-
-          <div className="certificate-grid-panel">
-            <div className="certificate-grid">
-              {visibleCertificates.map((certificate: Certificate, index: number) => {
-                const globalIndex = activeCertPage * CERTIFICATES_PER_PAGE + index;
-                const image = certificateImage(certificate);
-
-                return (
-                  <article className="cert-card" key={`${certificate.name ?? 'certificate'}-${globalIndex}`}>
-                    <div className={`cert-thumb ${image ? 'has-image' : ''}`}>
-                      {image ? (
-                        <img src={image} alt={`${certificate.name ?? 'Certificate'} preview`} loading="lazy" />
-                      ) : (
-                        <span>{padCount(globalIndex + 1)}</span>
-                      )}
-                    </div>
-
-                    <div className="cert-body">
-                      <span className="cert-number">{padCount(globalIndex + 1)}</span>
-
-                      {certificate.name && <h3>{certificate.name}</h3>}
-
-                      <div className="cert-meta">
-                        {certificate.issuer && <span>{certificate.issuer}</span>}
-                        {(certificate.date ?? certificate.year) && <span>{certificate.date ?? certificate.year}</span>}
-                      </div>
-
-                      {certificate.link && (
-                        <a className="cert-view" href={certificate.link} target="_blank" rel="noreferrer">
-                          View Certificate ↗
-                        </a>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-
-            <div className="cert-controls">
-              <div className="cert-page-label">
-                Page {activeCertPage + 1} / {certificatePageCount}
-              </div>
-
-              <div className="circle-buttons">
-                <button
-                  className="circle-btn"
-                  type="button"
-                  onClick={() => goToCertificatePage(activeCertPage - 1)}
-                  disabled={certificatePageCount <= 1}
-                >
-                  ‹
-                </button>
-                <button
-                  className="circle-btn"
-                  type="button"
-                  onClick={() => goToCertificatePage(activeCertPage + 1)}
-                  disabled={certificatePageCount <= 1}
-                >
-                  ›
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {education.length > 0 && (
-        <section className="section glass" id="education">
-          <div className="section-header compact">
-            <div className="section-title-wrap">
-              <SectionCounter count={education.length} label="EDU" />
-              <p className="eyebrow section-only-title">Education</p>
-            </div>
-          </div>
-
-          <div className="education-stack">
-            {education.map((edu: Education, index: number) => (
-              <article className="edu-card" key={`${edu.institution ?? 'edu'}-${index}`}>
-                <span>{edu.duration ?? edu.year ?? `Education ${index + 1}`}</span>
-                <h3>{edu.degree ?? edu.institution ?? `Education ${index + 1}`}</h3>
-                <p>{[edu.institution, edu.grade, edu.status].filter(Boolean).join(' • ')}</p>
-
-                {edu.link && (
-                  <a className="cert-view" href={edu.link} target="_blank" rel="noreferrer">
-                    View ↗
-                  </a>
-                )}
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
+            <SocialLinks items={socialItems} className="contact-links" />
+          </section>
+        )}
+      </div>
 
       <footer className="portfolio-footer">
-        © {new Date().getFullYear()} {displayName}. All rights reserved.
+        <span>© {new Date().getFullYear()} {displayName}</span>
       </footer>
     </main>
   );

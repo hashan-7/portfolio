@@ -1,6 +1,7 @@
 import { useState, type ChangeEvent } from 'react';
 import { uploadMedia } from '../../services/api';
 import type { FullProfile } from '../../types';
+import { normalizeMediaPath } from '../../utils/media';
 
 interface BasicProfileFormProps {
   profile: FullProfile;
@@ -11,6 +12,7 @@ function BasicProfileForm({ profile, onChange }: BasicProfileFormProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState('');
   const [uploadError, setUploadError] = useState('');
+  const profileImagePreview = normalizeMediaPath(profile.profile_image_path);
 
   const updateField = (field: keyof FullProfile, value: string | undefined) => {
     onChange({
@@ -51,7 +53,8 @@ function BasicProfileForm({ profile, onChange }: BasicProfileFormProps) {
     <section className="admin-section clean">
       <div className="admin-form-toolbar">
         <div>
-          <h2>Basic Profile</h2>
+
+<h2>Basic Profile</h2>
           <p className="admin-muted">
             Edit the public identity, profile image, title, location, tagline, and bio.
           </p>
@@ -98,13 +101,12 @@ function BasicProfileForm({ profile, onChange }: BasicProfileFormProps) {
         </div>
 
         <div className="admin-profile-image-preview">
-          {profile.profile_image_path ? <img src={profile.profile_image_path} alt="Profile preview" /> : <span>H7</span>}
+          {profileImagePreview ? <img src={profileImagePreview} alt="Profile preview" /> : <span>H7</span>}
         </div>
       </div>
 
       {uploadMessage && <p className="admin-success">{uploadMessage}</p>}
       {uploadError && <p className="admin-error">{uploadError}</p>}
-
       <div className="admin-form-grid">
         <label>
           Internal Full Name
@@ -117,7 +119,8 @@ function BasicProfileForm({ profile, onChange }: BasicProfileFormProps) {
         </label>
 
         <label>
-          Public Display Name
+
+Public Display Name
           <input
             type="text"
             value={profile.display_name ?? ''}

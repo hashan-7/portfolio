@@ -7,25 +7,28 @@ export function formatExternalLink(value?: string): string | undefined {
   const trimmed = value.trim();
   if (!trimmed) return undefined;
 
-  if (
-    trimmed.startsWith('http://') ||
-    trimmed.startsWith('https://') ||
-    trimmed.startsWith('mailto:') ||
-    trimmed.startsWith('tel:') ||
-    trimmed.startsWith('/')
-  ) {
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
     return trimmed;
   }
 
-  return `https://${trimmed}`;
+  const candidate = /^[a-z][a-z\d+.-]*:/i.test(trimmed) ? trimmed : `https://${trimmed}`;
+
+  try {
+    const url = new URL(candidate);
+    return ['http:', 'https:', 'mailto:', 'tel:'].includes(url.protocol) ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function emailLink(email?: string): string | undefined {
-  if (!email?.trim()) return undefined;
-  return `mailto:${email.trim()}`;
+  const value = email?.trim();
+  if (!value || /[\r\n]/.test(value)) return undefined;
+  return formatExternalLink(`mailto:${value}`);
 }
 
 export function phoneLink(phone?: string): string | undefined {
-  if (!phone?.trim()) return undefined;
-  return `tel:${phone.trim()}`;
+  const value = phone?.trim();
+  if (!value || /[\r\n]/.test(value)) return undefined;
+  return formatExternalLink(`tel:${value}`);
 }

@@ -1,285 +1,161 @@
 import { useEffect, useRef, useState } from 'react';
 import { sendChatMessage } from '../services/api';
 import type { ChatMessage } from '../types';
+import '../styles/assistant.css';
 
-interface ChatPosition {
+interface ChatbotProps {
+  onClose: () => void;
+}
+
+interface Position {
   x: number;
   y: number;
 }
 
 interface DragState {
   active: boolean;
-  pointerId: number | null;
-  offsetX: number;
-  offsetY: number;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  originX: number;
+  originY: number;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
 }
 
-function friendlyLinkLabel(url: string): string {
-  const lowerUrl = url.toLowerCase();
+const inactiveDrag: DragState = {
+  active: false,
+  pointerId: -1,
+  startX: 0,
+  startY: 0,
+  originX: 0,
+  originY: 0,
+  minX: 0,
+  maxX: 0,
+  minY: 0,
+  maxY: 0,
+};
 
-  if (lowerUrl.includes('github.com')) {
-    return 'GitHub Link ↗';
-  }
+function linkLabel(url: string): string {
+  const host = new URL(url).hostname.replace(/^www\./, '');
+  const isDomain = (domain: string) => host === domain || host.endsWith(`.${domain}`);
 
-  if (lowerUrl.includes('huggingface.co')) {
-    return 'Hugging Face Link ↗';
-  }
-
-  if (lowerUrl.includes('linkedin.com')) {
-    return 'LinkedIn Link ↗';
-  }
-
-  if (lowerUrl.includes('drive.google.com')) {
-    return 'Google Drive Link ↗';
-  }
-
-  if (lowerUrl.includes('kaggle.com')) {
-    return 'Kaggle Link ↗';
-  }
-
-  if (lowerUrl.includes('instagram.com')) {
-    return 'Instagram Link ↗';
-  }
-
-  return 'Open Link ↗';
+  if (isDomain('github.com')) return 'GitHub';
+  if (isDomain('huggingface.co')) return 'Hugging Face';
+  if (isDomain('linkedin.com')) return 'LinkedIn';
+  if (isDomain('kaggle.com')) return 'Kaggle';
+  return host;
 }
 
-function renderMessageContent(content: string) {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = content.split(urlRegex);
+function MessageContent({ content }: { content: string }) {
+  const parts = content.split(/(https?:\/\/[^\s]+)/g);
 
   return parts.map((part, index) => {
-    if (part.match(urlRegex)) {
-      const cleanUrl = part.replace(/[),.]+$/, '');
-      const trailing = part.slice(cleanUrl.length);
-
-      return (
-        <span key={`${part}-${index}`}>
-          <a className="message-link" href={cleanUrl} target="_blank" rel="noreferrer">
-            {friendlyLinkLabel(cleanUrl)}
-          </a>
-          {trailing && <span className="message-text-part">{trailing}</span>}
-        </span>
-      );
+    if (!/^https?:\/\//.test(part)) {
+      return <span key={`text-${index}`}>{part}</span>;
     }
 
-    return <span className="message-text-part" key={`${part}-${index}`}>{part}</span>;
+    const cleanUrl = part.replace(/[),.;!?]+$/, '');
+    const trailingText = part.slice(cleanUrl.length);
+
+    try {
+      return (
+        <span key={`${cleanUrl}-${index}`}>
+          <a className="message-link" href={cleanUrl} target="_blank" rel="noopener noreferrer">
+            {linkLabel(cleanUrl)} <span aria-hidden="true">↗</span>
+          </a>
+          {trailingText}
+        </span>
+      );
+    } catch {
+      return <span key={`invalid-${index}`}>{part}</span>;
+    }
   });
 }
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
 }
 
-function Chatbot() {
+const MIN_TYPING_INDICATOR_MS = 1000;
+const RESPONSE_CHUNK_MS = 45;
+
+function responseChunks(content: string): string[] {
+  return content.match(/(?:\S+\s*){1,3}/g) ?? [];
+}
+
+function waitForDelay(duration: number, signal: AbortSignal): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve(false);
+      return;
+    }
+
+    const finish = () => {
+      window.clearTimeout(timer);
+      signal.removeEventListener('abort', finish);
+      resolve(!signal.aborted);
+    };
+    const timer = window.setTimeout(finish, duration);
+    signal.addEventListener('abort', finish, { once: true });
+  });
+}
+
+function Chatbot({ onClose }: ChatbotProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isWaiting, setIsWaiting] = useState(false);
-  const [isTypingReply, setIsTypingReply] = useState(false);
-  const [isOpen, setIsOpen] = useState(false);
-  const [isClosing, setIsClosing] = useState(false);
-  const [position, setPosition] = useState<ChatPosition | null>(null);
-
-  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const [streamingReply, setStreamingReply] = useState<string | null>(null);
+  const [position, setPosition] = useState<Position>({ x: 0, y: 0 });
+  const panelRef = useRef<HTMLElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const popRef = useRef<HTMLElement | null>(null);
-  const typingTimerRef = useRef<number | null>(null);
-  const dragRef = useRef<DragState>({
-    active: false,
-    pointerId: null,
-    offsetX: 0,
-    offsetY: 0,
-  });
-
-  const scrollToBottom = () => {
-    window.requestAnimationFrame(() => {
-      if (messagesRef.current) {
-        messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
-      }
-    });
-  };
-
-  const getDefaultPosition = (): ChatPosition => {
-    const width = Math.min(360, window.innerWidth - 24);
-    const height = Math.min(520, window.innerHeight - 104);
-
-    return {
-      x: Math.max(10, window.innerWidth - width - 18),
-      y: Math.max(10, window.innerHeight - height - 78),
-    };
-  };
-
-  const stopDragging = () => {
-    dragRef.current = {
-      active: false,
-      pointerId: null,
-      offsetX: 0,
-      offsetY: 0,
-    };
-  };
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<DragState>(inactiveDrag);
+  const requestControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    scrollToBottom();
-  }, [messages, isWaiting, isTypingReply, isOpen]);
+    inputRef.current?.focus();
 
-  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
-      if (typingTimerRef.current) {
-        window.clearTimeout(typingTimerRef.current);
-      }
+      document.removeEventListener('keydown', handleKeyDown);
+      requestControllerRef.current?.abort();
     };
-  }, []);
+  }, [onClose]);
 
   useEffect(() => {
-    const handleResize = () => {
-      setPosition((currentPosition) => {
-        if (!currentPosition || !popRef.current) {
-          return currentPosition;
-        }
-
-        const rect = popRef.current.getBoundingClientRect();
-
-        return {
-          x: clamp(currentPosition.x, 10, Math.max(10, window.innerWidth - rect.width - 10)),
-          y: clamp(currentPosition.y, 10, Math.max(10, window.innerHeight - rect.height - 10)),
-        };
-      });
-    };
-
-    const handleWindowPointerEnd = () => {
-      stopDragging();
-    };
-
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('pointerup', handleWindowPointerEnd);
-    window.addEventListener('pointercancel', handleWindowPointerEnd);
-    window.addEventListener('blur', handleWindowPointerEnd);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('pointerup', handleWindowPointerEnd);
-      window.removeEventListener('pointercancel', handleWindowPointerEnd);
-      window.removeEventListener('blur', handleWindowPointerEnd);
-    };
-  }, []);
-
-  const openChat = () => {
-    setIsClosing(false);
-    setPosition(getDefaultPosition());
-    setIsOpen(true);
-
-    window.setTimeout(() => {
-      scrollToBottom();
-    }, 260);
-  };
-
-  const closeChat = () => {
-    stopDragging();
-    setIsClosing(true);
-
-    window.setTimeout(() => {
-      setIsOpen(false);
-      setIsClosing(false);
-      setPosition(null);
-    }, 300);
-  };
-
-  const typeAssistantReply = (reply: string) => {
-    const safeReply = reply.trim() || 'No reply received from H7 Assistant.';
-
-    setIsTypingReply(true);
-    setMessages((previousMessages) => [...previousMessages, { role: 'assistant', content: '' }]);
-
-    let index = 0;
-
-    const typingDelay = (character: string) => {
-      if (character === '\n') {
-        return 90;
-      }
-
-      if (/[.!?]/.test(character)) {
-        return 72;
-      }
-
-      if (/[,;:]/.test(character)) {
-        return 48;
-      }
-
-      return 24;
-    };
-
-    const typeNext = () => {
-      index += 1;
-
-      setMessages((previousMessages) => {
-        const nextMessages = [...previousMessages];
-        const lastIndex = nextMessages.length - 1;
-
-        if (lastIndex >= 0 && nextMessages[lastIndex].role === 'assistant') {
-          nextMessages[lastIndex] = {
-            ...nextMessages[lastIndex],
-            content: safeReply.slice(0, index),
-          };
-        }
-
-        return nextMessages;
-      });
-
-      if (index < safeReply.length) {
-        typingTimerRef.current = window.setTimeout(typeNext, typingDelay(safeReply[index - 1] ?? ''));
-        return;
-      }
-
-      setIsTypingReply(false);
-      setIsWaiting(false);
-    };
-
-    typingTimerRef.current = window.setTimeout(typeNext, 160);
-  };
-
-  const handleSend = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const userMessage = input.trim();
-
-    if (!userMessage || isWaiting || isTypingReply) {
-      return;
-    }
-
-    if (typingTimerRef.current) {
-      window.clearTimeout(typingTimerRef.current);
-    }
-
-    const updatedHistory: ChatMessage[] = [...messages, { role: 'user', content: userMessage }];
-
-    setMessages(updatedHistory);
-    setInput('');
-    setIsWaiting(true);
-
-    try {
-      const reply = await sendChatMessage(updatedHistory);
-      typeAssistantReply(reply);
-    } catch {
-      typeAssistantReply('I could not connect to H7 Assistant. Please try again.');
-    }
-  };
+    const messagesElement = messagesRef.current;
+    if (!messagesElement) return;
+    messagesElement.scrollTop = messagesElement.scrollHeight;
+  }, [isWaiting, messages, streamingReply]);
 
   const startDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!popRef.current) {
-      return;
-    }
+    const panel = panelRef.current;
+    const isCompact = window.matchMedia('(max-width: 720px), (pointer: coarse)').matches;
 
-    if (event.pointerType === 'mouse' && event.button !== 0) {
-      return;
-    }
+    if (!panel || isCompact || (event.pointerType === 'mouse' && event.button !== 0)) return;
 
-    const rect = popRef.current.getBoundingClientRect();
+    const rect = panel.getBoundingClientRect();
+    const baseLeft = rect.left - position.x;
+    const baseTop = rect.top - position.y;
 
     dragRef.current = {
       active: true,
       pointerId: event.pointerId,
-      offsetX: event.clientX - rect.left,
-      offsetY: event.clientY - rect.top,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: position.x,
+      originY: position.y,
+      minX: 12 - baseLeft,
+      maxX: window.innerWidth - rect.width - 12 - baseLeft,
+      minY: 12 - baseTop,
+      maxY: window.innerHeight - rect.height - 12 - baseTop,
     };
 
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -288,128 +164,178 @@ function Chatbot() {
 
   const moveDrag = (event: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-
-    if (!drag.active || drag.pointerId !== event.pointerId || !popRef.current) {
-      return;
-    }
-
-    if (event.pointerType === 'mouse' && event.buttons !== 1) {
-      stopDragging();
-      return;
-    }
-
-    const rect = popRef.current.getBoundingClientRect();
+    if (!drag.active || drag.pointerId !== event.pointerId) return;
 
     setPosition({
-      x: clamp(event.clientX - drag.offsetX, 10, Math.max(10, window.innerWidth - rect.width - 10)),
-      y: clamp(event.clientY - drag.offsetY, 10, Math.max(10, window.innerHeight - rect.height - 10)),
+      x: clamp(drag.originX + event.clientX - drag.startX, drag.minX, drag.maxX),
+      y: clamp(drag.originY + event.clientY - drag.startY, drag.minY, drag.maxY),
     });
   };
 
   const stopDrag = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current.pointerId === event.pointerId) {
-      stopDragging();
+    if (dragRef.current.pointerId !== event.pointerId) return;
+    dragRef.current = inactiveDrag;
 
-      try {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      } catch {
-        
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const handleSend = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const content = input.trim();
+
+    if (!content || isWaiting || requestControllerRef.current) return;
+
+    const nextHistory: ChatMessage[] = [...messages, { role: 'user', content }];
+    setMessages(nextHistory);
+    setInput('');
+    setIsWaiting(true);
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
+
+    try {
+      const [reply, typingMinimumCompleted] = await Promise.all([
+        sendChatMessage(nextHistory, controller.signal),
+        waitForDelay(MIN_TYPING_INDICATOR_MS, controller.signal),
+      ]);
+
+      if (!typingMinimumCompleted || controller.signal.aborted) return;
+
+      const response = reply.trim() || 'No reply received from H7 Assistant.';
+      const chunks = responseChunks(response);
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      if (reducedMotion || chunks.length <= 1) {
+        setMessages((history) => [
+          ...history,
+          { role: 'assistant', content: response },
+        ]);
+        return;
+      }
+
+      let visibleReply = chunks[0];
+      setStreamingReply(visibleReply);
+
+      for (let index = 1; index < chunks.length; index += 1) {
+        if (!(await waitForDelay(RESPONSE_CHUNK_MS, controller.signal))) return;
+        visibleReply += chunks[index];
+        setStreamingReply(visibleReply);
+      }
+
+      setMessages((history) => [
+        ...history,
+        { role: 'assistant', content: response },
+      ]);
+    } catch (error) {
+      if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return;
+
+      setMessages((history) => [
+        ...history,
+        {
+          role: 'assistant',
+          content: 'H7 Assistant is temporarily unavailable. Please try again.',
+        },
+      ]);
+    } finally {
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+        const wasAborted = controller.signal.aborted;
+        controller.abort();
+        if (!wasAborted) {
+          setStreamingReply(null);
+          setIsWaiting(false);
+          window.requestAnimationFrame(() => inputRef.current?.focus());
+        }
       }
     }
   };
 
   return (
-    <>
-      {!isOpen && !isClosing && (
-        <button className="h7-launcher" type="button" onClick={openChat}>
-          <span className="h7-launcher-orb">H7</span>
-          <span>
-            <strong>H7 Ask</strong>
-            <span>Open assistant</span>
-          </span>
-        </button>
-      )}
-
-      {(isOpen || isClosing) && (
-        <section
-          ref={popRef}
-          className={`chat-pop ${isOpen && !isClosing ? 'open' : ''} ${isClosing ? 'closing' : ''}`}
-          style={
-            position
-              ? {
-                  left: position.x,
-                  top: position.y,
-                  right: 'auto',
-                  bottom: 'auto',
-                }
-              : undefined
-          }
+    <section
+      ref={panelRef}
+      className="assistant-panel"
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby="assistant-title"
+      aria-describedby="assistant-description"
+      style={{ transform: `translate3d(${position.x}px, ${position.y}px, 0)` }}
+    >
+      <header className="assistant-header">
+        <div
+          className="assistant-drag-handle"
+          onPointerDown={startDrag}
+          onPointerMove={moveDrag}
+          onPointerUp={stopDrag}
+          onPointerCancel={stopDrag}
         >
-          <header className="chat-header">
-            <div className="chat-top">
-              <div
-                className="chat-drag-zone"
-                onPointerDown={startDrag}
-                onPointerMove={moveDrag}
-                onPointerUp={stopDrag}
-                onPointerCancel={stopDrag}
-                onLostPointerCapture={stopDrag}
-              >
-                <div className="chat-title">
-                  <h2>H7 Assistant</h2>
-                  <p>Hold this title area to move. Ask about projects, skills, certificates, or education.</p>
-                </div>
-              </div>
-
-              <button className="close-btn" type="button" onClick={closeChat}>
-                ✕
-              </button>
-            </div>
-          </header>
-
-          <div className="chat-messages" ref={messagesRef}>
-            {messages.length === 0 && !isWaiting && !isTypingReply && (
-              <div className="empty-chat">
-                <strong>Welcome to H7 Assistant</strong>
-                <p>Ask anything about this portfolio. Try project 1, skills, certificates, or strengths.</p>
-              </div>
-            )}
-
-            {messages.map((message, index) => (
-              <div className={`msg ${message.role}`} key={`${message.role}-${index}`}>
-                <span className="msg-label">{message.role === 'user' ? 'You' : 'H7 Assistant'}</span>
-                <p>{renderMessageContent(message.content)}</p>
-              </div>
-            ))}
-
-            {isWaiting && !isTypingReply && (
-              <div className="msg assistant">
-                <span className="msg-label">H7 Assistant</span>
-                <div className="typing">
-                  <i />
-                  <i />
-                  <i />
-                </div>
-              </div>
-            )}
+          <span className="assistant-status" aria-hidden="true" />
+          <div>
+            <h2 id="assistant-title">H7 Assistant</h2>
+            <p id="assistant-description">Ask about this portfolio's projects, skills, certificates, or education.</p>
           </div>
+        </div>
+        <button className="assistant-close" type="button" onClick={onClose} aria-label="Close H7 Assistant">×</button>
+      </header>
 
-          <form className="chat-form" onSubmit={handleSend}>
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              placeholder="Ask H7 Assistant..."
-              disabled={isWaiting || isTypingReply}
-            />
-            <button className="send-btn" type="submit" disabled={isWaiting || isTypingReply || !input.trim()}>
-              Send
-            </button>
-          </form>
-        </section>
-      )}
-    </>
+      <div
+        className="assistant-messages"
+        ref={messagesRef}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        aria-busy={isWaiting}
+      >
+        {messages.length === 0 && (
+          <div className="assistant-welcome">
+            <span>PORTFOLIO CONTEXT / READY</span>
+            <h3>What would you like to know?</h3>
+            <p>Try asking about a project, the technical stack, certifications, education, or public contact links.</p>
+          </div>
+        )}
+
+        {messages.map((message, index) => (
+          <article className={`assistant-message ${message.role}`} key={`${message.role}-${index}`}>
+            <span>{message.role === 'user' ? 'You' : 'H7'}</span>
+            <p><MessageContent content={message.content} /></p>
+          </article>
+        ))}
+
+        {streamingReply !== null && (
+          <article className="assistant-message assistant" aria-hidden="true">
+            <span>H7</span>
+            <p>{responseChunks(streamingReply).map((chunk, index) => (
+              <span className="assistant-response-chunk" key={index}>
+                <MessageContent content={chunk} />
+              </span>
+            ))}</p>
+          </article>
+        )}
+
+        {isWaiting && streamingReply === null && (
+          <div className="assistant-thinking" role="status">
+            <span>H7 Typing...</span>
+            <i aria-hidden="true" /><i aria-hidden="true" /><i aria-hidden="true" />
+          </div>
+        )}
+      </div>
+
+      <form className="assistant-form" onSubmit={handleSend}>
+        <label className="sr-only" htmlFor="assistant-input">Ask H7 Assistant</label>
+        <input
+          ref={inputRef}
+          id="assistant-input"
+          type="text"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          placeholder="Ask about the portfolio..."
+          autoComplete="off"
+          maxLength={500}
+          disabled={isWaiting}
+        />
+        <button type="submit" disabled={isWaiting || !input.trim()} aria-label="Send message">Send</button>
+      </form>
+    </section>
   );
 }
 

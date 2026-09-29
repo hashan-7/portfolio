@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import AdminDashboard from '../components/admin/AdminDashboard';
 import AdminLogin from '../components/admin/AdminLogin';
 import { logoutAdmin, verifyAdminSession } from '../services/api';
+import '../styles/admin.css';
 
 function AdminPage() {
   const [isChecking, setIsChecking] = useState(true);

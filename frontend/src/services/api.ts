@@ -1,7 +1,9 @@
 import type { ChatMessage, FullProfile, PublicProfile } from '../types';
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:7860' : '');
+  (import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:7860' : ''))
+    .trim()
+    .replace(/\/+$/, '');
 
 const ADMIN_TOKEN_KEY = 'admin_token';
 const ADMIN_TOKEN_EXPIRES_AT_KEY = 'admin_token_expires_at';
@@ -52,7 +54,7 @@ function getAdminToken(): string | null {
     return null;
   }
 
-  return token;
+return token;
 }
 
 function getAuthHeaders() {
@@ -98,27 +100,28 @@ export function getAdminSessionRemainingMs(): number | null {
   return expiresAtMs - Date.now();
 }
 
-export async function getProfile(): Promise<PublicProfile> {
-  const response = await fetch(`${API_BASE_URL}/api/profile`);
+export async function getProfile(signal?: AbortSignal): Promise<PublicProfile> {
+  const response = await fetch(`${API_BASE_URL}/api/profile`, { signal });
 
   if (!response.ok) {
     throw new Error(await getApiErrorMessage(response, `Failed to load profile data. Status: ${response.status}`));
   }
-
   return response.json();
 }
 
-export async function sendChatMessage(history: ChatMessage[], scope = 'all'): Promise<string> {
+export async function sendChatMessage(history: ChatMessage[], signal?: AbortSignal): Promise<string> {
+  const recentHistory = history.slice(-12);
   const response = await fetch(`${API_BASE_URL}/api/chat`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ history, scope }),
+    body: JSON.stringify({ history: recentHistory }),
+    signal,
   });
-
   if (!response.ok) {
-    throw new Error(await getApiErrorMessage(response, `Failed to send chat message. Status: ${response.status}`));
+
+throw new Error(await getApiErrorMessage(response, `Failed to send chat message. Status: ${response.status}`));
   }
 
   const data = (await response.json()) as { reply?: string };
@@ -151,12 +154,11 @@ export async function loginAdmin(email: string, password: string): Promise<strin
     throw new Error('Admin token was not received.');
   }
 
-  const fallbackExpiresAtMs = Date.now() + 60 * 60 * 1000;
+  const fallbackExpiresAtMs = Date.now() + (data.expires_in_seconds ?? 60 * 60) * 1000;
   const expiresAtMs = data.expires_at ? data.expires_at * 1000 : fallbackExpiresAtMs;
 
   localStorage.setItem(ADMIN_TOKEN_KEY, data.token);
   localStorage.setItem(ADMIN_TOKEN_EXPIRES_AT_KEY, String(expiresAtMs));
-
   return data.token;
 }
 

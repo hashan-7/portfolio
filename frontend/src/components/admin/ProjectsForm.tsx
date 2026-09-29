@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { uploadMedia } from '../../services/api';
 import type { FullProfile, Project } from '../../types';
+import { normalizeMediaPath } from '../../utils/media';
 
 interface ProjectsFormProps {
   profile: FullProfile;
@@ -51,9 +52,9 @@ function ProjectsForm({ profile, onChange, requestConfirm }: ProjectsFormProps) 
     }
 
     const imagePaths = selectedProject.image_paths ?? [];
-
     if (imagePaths.length > 0) {
-      return imagePaths.slice(0, 3);
+
+return imagePaths.slice(0, 3);
     }
 
     return selectedProject.image_path ? [selectedProject.image_path] : [];
@@ -118,7 +119,8 @@ function ProjectsForm({ profile, onChange, requestConfirm }: ProjectsFormProps) 
       'Delete project?',
       `Are you sure you want to delete "${projectTitle}"? This action cannot be undone after saving.`,
       () => {
-        const nextProjects = projects.filter((_, index) => index !== safeSelectedIndex);
+
+const nextProjects = projects.filter((_, index) => index !== safeSelectedIndex);
         updateProjects(nextProjects);
         setSelectedIndex(Math.max(0, safeSelectedIndex - 1));
         setUploadMessage('');
@@ -183,7 +185,8 @@ function ProjectsForm({ profile, onChange, requestConfirm }: ProjectsFormProps) 
       setUploadMessage(`Uploaded ${imageOnlyPaths.length} image(s).`);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : 'Failed to upload image.');
-    } finally {
+
+} finally {
       setIsUploading(false);
     }
   };
@@ -249,7 +252,7 @@ function ProjectsForm({ profile, onChange, requestConfirm }: ProjectsFormProps) 
         </div>
       </div>
 
-      {projects.length === 0 && (
+{projects.length === 0 && (
         <div className="admin-empty-box">
           <p>No projects yet. Click Add Project to create one.</p>
         </div>
@@ -314,7 +317,8 @@ function ProjectsForm({ profile, onChange, requestConfirm }: ProjectsFormProps) 
                     className="admin-json-editor compact"
                     value={selectedProject.short_description ?? ''}
                     onChange={(event) =>
-                      updateSelectedProject({
+
+updateSelectedProject({
                         ...selectedProject,
                         short_description: event.target.value,
                       })
@@ -379,7 +383,8 @@ function ProjectsForm({ profile, onChange, requestConfirm }: ProjectsFormProps) 
                         video_path: event.target.value,
                       })
                     }
-                    placeholder="/media/projects/videos/demo.mp4"
+
+placeholder="/media/projects/videos/demo.mp4"
                   />
                 </label>
 
@@ -428,7 +433,6 @@ function ProjectsForm({ profile, onChange, requestConfirm }: ProjectsFormProps) 
                   />
                 </label>
               </div>
-
               <div className="admin-switch-grid">
                 <label className="admin-checkbox-row">
                   <input
@@ -445,7 +449,8 @@ function ProjectsForm({ profile, onChange, requestConfirm }: ProjectsFormProps) 
                 </label>
 
                 <label className="admin-checkbox-row">
-                  <input
+
+<input
                     type="checkbox"
                     checked={selectedProject.chatbot_visible ?? true}
                     onChange={(event) =>
@@ -504,13 +509,14 @@ function ProjectsForm({ profile, onChange, requestConfirm }: ProjectsFormProps) 
                   <div className="project-image-grid">
                     {selectedImages.map((imagePath, index) => (
                       <div className="project-image-card" key={`${imagePath}-${index}`}>
-                        <img src={imagePath} alt={`Project image ${index + 1}`} />
+                        <img src={normalizeMediaPath(imagePath)} alt={`Project image ${index + 1}`} />
                         <div>
                           <span>Image {index + 1}</span>
                           <code>{imagePath}</code>
                         </div>
                         <button
-                          className="admin-danger-button small"
+
+className="admin-danger-button small"
                           type="button"
                           onClick={() => removeImage(index)}
                         >

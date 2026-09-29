@@ -14,13 +14,13 @@ function isAbsoluteMediaUrl(path: string): boolean {
 
 export function isVideoPath(path?: string): boolean {
   if (!path) return false;
-  const lowerPath = path.toLowerCase();
+  const lowerPath = path.toLowerCase().split(/[?#]/, 1)[0];
   return videoExtensions.some((extension) => lowerPath.endsWith(extension));
 }
 
 export function isImagePath(path?: string): boolean {
   if (!path) return false;
-  const lowerPath = path.toLowerCase();
+  const lowerPath = path.toLowerCase().split(/[?#]/, 1)[0];
   return imageExtensions.some((extension) => lowerPath.endsWith(extension));
 }
 
@@ -52,3 +52,4 @@ export function normalizeMediaPaths(paths?: string[]): string[] {
     .map(normalizeMediaPath)
     .filter((path): path is string => Boolean(path));
 }
+

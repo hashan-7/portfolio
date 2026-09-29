@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   getAdminProfile,
   getAdminSessionRemainingMs,
@@ -27,6 +27,7 @@ interface ConfirmState {
   open: boolean;
   title: string;
   message: string;
+  confirmLabel: string;
   onConfirm: () => void;
 }
 
@@ -52,7 +53,8 @@ const tabMeta: Record<AdminTab, { title: string; description: string }> = {
     description: 'Manage verified certificates and proof links.',
   },
   education: {
-    title: 'Education',
+
+title: 'Education',
     description: 'Manage school and NIBM education entries.',
   },
   json: {
@@ -95,6 +97,7 @@ function formatRemainingTime(milliseconds: number | null): string {
 function AdminDashboard() {
   const [profile, setProfile] = useState<FullProfile | null>(null);
   const [jsonText, setJsonText] = useState('');
+  const [savedProfileText, setSavedProfileText] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTab>('profile');
   const [statusMessage, setStatusMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -103,22 +106,32 @@ function AdminDashboard() {
   );
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-
   const [confirmState, setConfirmState] = useState<ConfirmState>({
     open: false,
     title: '',
     message: '',
+    confirmLabel: 'Delete',
     onConfirm: () => {},
   });
 
   const projectCount = useMemo(() => profile?.projects?.length ?? 0, [profile]);
   const certificateCount = useMemo(() => profile?.certificates?.length ?? 0, [profile]);
   const skillCount = useMemo(() => profile?.skills?.length ?? 0, [profile]);
+  const isDirty = useMemo(
+    () =>
+      Boolean(
+        profile &&
+          savedProfileText &&
+          (JSON.stringify(profile) !== savedProfileText ||
+            jsonText !== JSON.stringify(profile, null, 2)),
+      ),
+    [jsonText, profile, savedProfileText],
+  );
 
-  const endAdminSession = () => {
+  const endAdminSession = useCallback(() => {
     logoutAdmin();
     window.location.replace('/h7-admin');
-  };
+  }, []);
 
   useEffect(() => {
     const syncRemainingTime = () => {
@@ -147,11 +160,14 @@ function AdminDashboard() {
         window.clearTimeout(timeoutId);
       }
     };
-  }, []);
+  }, [endAdminSession]);
 
-  const setProfileAndJson = (nextProfile: FullProfile) => {
+  const setProfileAndJson = (nextProfile: FullProfile, markSaved = false) => {
     setProfile(nextProfile);
     setJsonText(JSON.stringify(nextProfile, null, 2));
+    if (markSaved) {
+      setSavedProfileText(JSON.stringify(nextProfile));
+    }
   };
 
   const handleAdminError = (error: unknown, fallbackMessage: string) => {
@@ -159,7 +175,7 @@ function AdminDashboard() {
     setErrorMessage(message);
 
     if (message.toLowerCase().includes('session expired')) {
-      window.setTimeout(endAdminSession, 900);
+      endAdminSession();
     }
   };
 
@@ -170,33 +186,69 @@ function AdminDashboard() {
 
     try {
       const data = await getAdminProfile();
-      setProfileAndJson(data);
+      setProfileAndJson(data, true);
     } catch (error) {
       handleAdminError(error, 'Failed to load admin profile.');
     } finally {
-      setIsLoading(false);
+
+setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    loadProfile();
+    let active = true;
+
+    getAdminProfile()
+      .then((data) => {
+        if (!active) return;
+        setProfile(data);
+        setJsonText(JSON.stringify(data, null, 2));
+        setSavedProfileText(JSON.stringify(data));
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setErrorMessage(error instanceof Error ? error.message : 'Failed to load admin profile.');
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const requestConfirm = (title: string, message: string, onConfirm: () => void) => {
+  useEffect(() => {
+    if (!isDirty) return undefined;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [isDirty]);
+
+  const requestConfirm = (
+    title: string,
+    message: string,
+    onConfirm: () => void,
+    confirmLabel = 'Delete',
+  ) => {
     setConfirmState({
       open: true,
       title,
       message,
+      confirmLabel,
       onConfirm,
     });
   };
 
-  const closeConfirm = () => {
+  const closeConfirm = useCallback(() => {
     setConfirmState((previous) => ({
       ...previous,
       open: false,
     }));
-  };
+  }, []);
 
   const handleConfirmedAction = () => {
     confirmState.onConfirm();
@@ -204,7 +256,8 @@ function AdminDashboard() {
   };
 
   const handleSaveCurrentTab = async () => {
-    if (!profile) {
+
+if (!profile) {
       setErrorMessage('Profile data is not loaded.');
       return;
     }
@@ -215,6 +268,7 @@ function AdminDashboard() {
 
     try {
       await updateAdminProfile(profile);
+      setSavedProfileText(JSON.stringify(profile));
       setStatusMessage(`${tabMeta[activeTab].title} saved successfully.`);
     } catch (error) {
       handleAdminError(error, 'Failed to save profile.');
@@ -244,7 +298,7 @@ function AdminDashboard() {
     try {
       const parsedProfile = JSON.parse(jsonText) as FullProfile;
       await updateAdminProfile(parsedProfile);
-      setProfileAndJson(parsedProfile);
+      setProfileAndJson(parsedProfile, true);
       setStatusMessage('JSON saved successfully.');
     } catch (error) {
       handleAdminError(error, 'Failed to save JSON.');
@@ -253,8 +307,33 @@ function AdminDashboard() {
     }
   };
 
+  const requestReload = () => {
+    if (!isDirty) {
+      void loadProfile();
+      return;
+    }
+
+    requestConfirm(
+      'Discard unsaved changes?',
+      'Reloading will replace the changes currently held in this browser.',
+      () => void loadProfile(),
+      'Discard changes',
+    );
+  };
+
   const handleLogout = () => {
-    endAdminSession();
+
+if (!isDirty) {
+      endAdminSession();
+      return;
+    }
+
+    requestConfirm(
+      'Leave without saving?',
+      'Your unsaved portfolio changes will be lost when you sign out.',
+      endAdminSession,
+      'Sign out',
+    );
   };
 
   const renderActiveTab = () => {
@@ -303,7 +382,6 @@ function AdminDashboard() {
         />
       );
     }
-
     return (
       <section className="admin-section clean">
         <h2>Full Profile JSON</h2>
@@ -311,7 +389,7 @@ function AdminDashboard() {
           Advanced editor. Any valid change here will update form state automatically after applying.
         </p>
 
-        <textarea
+<textarea
           className="admin-json-editor large"
           value={jsonText}
           onChange={(event) => setJsonText(event.target.value)}
@@ -358,14 +436,13 @@ function AdminDashboard() {
         </nav>
 
         <p className="admin-nav-label">Session</p>
-
         <div className="admin-nav-list">
           <a className="admin-nav-item" href="/" target="_blank" rel="noreferrer">
             <span>↗</span>
             View Public Site
           </a>
           <button className="admin-nav-item" type="button" onClick={handleLogout}>
-            <span>⎋</span>
+            <span>→</span>
             Logout
           </button>
         </div>
@@ -377,7 +454,8 @@ function AdminDashboard() {
       </aside>
 
       <section className="admin-main">
-        <header className="admin-topbar">
+
+<header className="admin-topbar">
           <div>
             <p className="eyebrow">Admin Dashboard</p>
             <h1>Portfolio Data Manager</h1>
@@ -388,7 +466,7 @@ function AdminDashboard() {
           </div>
 
           <div className="admin-actions top">
-            <button className="admin-secondary-button" type="button" onClick={loadProfile}>
+            <button className="admin-secondary-button" type="button" onClick={requestReload}>
               Reload
             </button>
             <button type="button" onClick={handleSaveCurrentTab} disabled={isSaving || !profile}>
@@ -423,7 +501,9 @@ function AdminDashboard() {
                 <h2>{tabMeta[activeTab].title}</h2>
                 <p>{tabMeta[activeTab].description}</p>
               </div>
-              <span className="admin-badge">Auto JSON Sync</span>
+              <span className={`admin-badge ${isDirty ? 'dirty' : ''}`}>
+                {isDirty ? 'Unsaved changes' : 'All changes saved'}
+              </span>
             </div>
 
             <div className="admin-panel-body">
@@ -439,8 +519,9 @@ function AdminDashboard() {
                 <button
                   className="admin-secondary-button"
                   type="button"
-                  onClick={loadProfile}
-                  disabled={isSaving}
+                  onClick={requestReload}
+
+disabled={isSaving}
                 >
                   Reload
                 </button>
@@ -505,16 +586,26 @@ function AdminDashboard() {
               </div>
             </section>
           </aside>
-        </div>
 
-        {statusMessage && <p className="admin-success floating">{statusMessage}</p>}
-        {errorMessage && <p className="admin-error floating">{errorMessage}</p>}
+</div>
+
+        {statusMessage && (
+          <p className="admin-success floating" role="status" aria-live="polite">
+            {statusMessage}
+          </p>
+        )}
+        {errorMessage && (
+          <p className="admin-error floating" role="alert">
+            {errorMessage}
+          </p>
+        )}
       </section>
 
       <ConfirmDialog
         open={confirmState.open}
         title={confirmState.title}
         message={confirmState.message}
+        confirmLabel={confirmState.confirmLabel}
         onCancel={closeConfirm}
         onConfirm={handleConfirmedAction}
       />

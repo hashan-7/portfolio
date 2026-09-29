@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { uploadMedia } from '../../services/api';
 import type { Certificate, FullProfile } from '../../types';
+import { normalizeMediaPath } from '../../utils/media';
 
 interface CertificatesFormProps {
   profile: FullProfile;
@@ -30,6 +31,7 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
     safeSelectedIndex >= 0 ? certificates[safeSelectedIndex] : null;
 
   const selectedImagePath = selectedCertificate?.image_path?.trim() ?? '';
+  const selectedImagePreview = normalizeMediaPath(selectedImagePath);
 
   const updateCertificates = (nextCertificates: Certificate[]) => {
     onChange({
@@ -51,7 +53,8 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
   const addCertificate = () => {
     const nextCertificates = [...certificates, { ...emptyCertificate }];
     updateCertificates(nextCertificates);
-    setSelectedIndex(nextCertificates.length - 1);
+
+setSelectedIndex(nextCertificates.length - 1);
     setUploadError('');
   };
 
@@ -103,7 +106,6 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
 
     setIsUploadingImage(true);
     setUploadError('');
-
     try {
       const uploadedFiles = await uploadMedia(file);
       const imagePath = uploadedFiles[0];
@@ -117,7 +119,8 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
         image_path: imagePath,
       });
     } catch (error) {
-      setUploadError(error instanceof Error ? error.message : 'Failed to upload certificate image.');
+
+setUploadError(error instanceof Error ? error.message : 'Failed to upload certificate image.');
     } finally {
       setIsUploadingImage(false);
     }
@@ -182,7 +185,8 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
               }}
             >
               {certificates.map((certificate, index) => (
-                <option key={`${certificate.name || 'certificate'}-${index}`} value={index}>
+
+<option key={`${certificate.name || 'certificate'}-${index}`} value={index}>
                   {index + 1}. {certificate.name || `Untitled Certificate ${index + 1}`}
                 </option>
               ))}
@@ -193,8 +197,8 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
             <>
               <div className="admin-certificate-image-panel">
                 <div className="admin-certificate-image-preview">
-                  {selectedImagePath ? (
-                    <img src={selectedImagePath} alt={selectedCertificate.name || 'Certificate preview'} />
+                  {selectedImagePreview ? (
+                    <img src={selectedImagePreview} alt={selectedCertificate.name || 'Certificate preview'} />
                   ) : (
                     <span>Cert</span>
                   )}
@@ -247,7 +251,8 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
 
                   {uploadError && <p className="admin-error">{uploadError}</p>}
                   <p className="admin-field-help">
-                    Keep certificate images small and clean. The public card will crop the image to a fixed preview size.
+
+Keep certificate images small and clean. The public card will crop the image to a fixed preview size.
                   </p>
                 </div>
               </div>
@@ -312,7 +317,8 @@ function CertificatesForm({ profile, onChange, requestConfirm }: CertificatesFor
                     }
                     placeholder="https://..."
                   />
-                </label>
+
+</label>
               </div>
             </>
           )}
