@@ -1,45 +1,61 @@
+# syntax=docker/dockerfile:1.7
+
 FROM node:22-bookworm-slim AS frontend-builder
 
 WORKDIR /app/frontend
 
-COPY frontend/package*.json ./
-
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+COPY frontend/package.json frontend/package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
 
 COPY frontend/ ./
-
 RUN npm run build
 
-FROM rust:1.95-bookworm AS backend-builder
+FROM rust:1.95.0-bookworm AS backend-builder
 
 WORKDIR /app
 
-COPY . .
+COPY Cargo.toml Cargo.lock ./
+COPY backend/Cargo.toml backend/Cargo.toml
 
-RUN cargo build --release --locked -p backend
+RUN mkdir -p backend/src \
+    && printf 'fn main() {}\n' > backend/src/main.rs
+RUN --mount=type=cache,id=portfolio-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=portfolio-cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=portfolio-cargo-target,target=/app/target \
+    cargo build --release --locked -p backend
 
-FROM debian:bookworm-slim
+RUN rm -rf backend/src
+COPY backend/src backend/src
+RUN --mount=type=cache,id=portfolio-cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=portfolio-cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=portfolio-cargo-target,target=/app/target \
+    touch backend/src/main.rs \
+    && cargo build --release --locked -p backend \
+    && cp target/release/backend /app/portfolio-backend
+
+FROM debian:bookworm-slim AS runtime
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+RUN groupadd --gid 1000 portfolio \
+    && useradd --uid 1000 --gid portfolio --create-home portfolio \
+    && install -d -o portfolio -g portfolio \
+        /app/data/profile \
+        /app/data/assets/projects/images \
+        /app/data/assets/projects/videos \
+        /app/data/.upload-staging
 
-COPY --from=backend-builder /app/target/release/backend /app/backend
-COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
+COPY --from=backend-builder --chown=portfolio:portfolio --chmod=0555 \
+    /app/portfolio-backend /app/backend
+COPY --from=frontend-builder --chown=portfolio:portfolio \
+    /app/frontend/dist /app/frontend/dist
 
-RUN useradd -m -u 1000 user \
-    && mkdir -p /app/data/profile \
-    && mkdir -p /app/data/assets/projects/images \
-    && mkdir -p /app/data/assets/projects/videos \
-    && chown -R user:user /app/data /app/frontend/dist /app/backend \
-    && chmod +x /app/backend
+USER portfolio:portfolio
 
-USER user
-
-ENV PORT=7860
+ENV PORT=7860 \
+    RUST_LOG=backend=info,tower_http=info
 
 EXPOSE 7860
+STOPSIGNAL SIGTERM
 
 CMD ["./backend"]

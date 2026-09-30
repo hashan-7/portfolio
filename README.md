@@ -50,35 +50,31 @@ The H7 Assistant is a local portfolio assistant. It answers common portfolio que
 
 ## Current Production Architecture
 
-The current production setup uses separate hosting for the frontend and backend.
+The primary production path is a single Hugging Face Docker Space. The image builds the React application and Rust backend, then the backend serves the compiled SPA, API, and public media from one origin.
 
 ```text
-Cloudflare Pages Frontend
-        ↓
-Hugging Face Space Rust Backend
-        ↓
-Hugging Face Storage Bucket mounted at /data
+Custom domain / Hugging Face Space URL
+                    ↓
+Hugging Face Docker Space
+  ├── React SPA served by Axum
+  ├── Rust API and H7 Assistant
+  └── persistent filesystem at /data when Space storage is enabled
 ```
 
-The frontend is hosted on Cloudflare Pages and connected to the custom domain:
+Primary public URLs:
 
 ```text
 https://chamirahashan.tech
-```
-
-The backend is hosted on Hugging Face Spaces:
-
-```text
 https://hashan-7-chamira-hashan.hf.space
 ```
 
-The frontend calls the backend through:
+Because the browser and API share an origin, the production frontend can use an empty API base URL:
 
 ```text
-VITE_API_BASE_URL=https://hashan-7-chamira-hashan.hf.space
+VITE_API_BASE_URL=
 ```
 
-The Hugging Face Space keeps the backend public so the Cloudflare-hosted frontend can call the API from the browser.
+Cloudflare Pages remains an optional deployment mode. When used, set `VITE_API_BASE_URL` to the Space URL and add the exact frontend origin to `ALLOWED_ORIGINS`.
 
 ---
 
@@ -95,17 +91,17 @@ The Hugging Face Space keeps the backend public so the Cloudflare-hosted fronten
 - Floating H7 Assistant chatbot popup
 - Local JSON-based portfolio assistant replies
 - Protected admin panel with authentication
-- One-hour admin session expiry
+- Configurable 5-60 minute admin session expiry
 - Admin-managed JSON profile data
 - Media upload support for project/profile assets
 - Rust Axum backend
 - React TypeScript Vite frontend
-- Cloudflare Pages frontend deployment
-- Docker-based Hugging Face Spaces backend deployment
-- Hugging Face Storage Bucket support
-- API rate limiting
+- Same-origin Docker deployment on Hugging Face Spaces
+- Optional Cloudflare Pages frontend deployment
+- Persistent Hugging Face storage support
+- Bounded per-client and global API rate limiting
 - CORS origin restriction
-- Frontend security headers
+- Request IDs, timeouts, concurrency limits, and security headers
 
 ---
 
@@ -119,9 +115,10 @@ The Hugging Face Space keeps the backend public so the Cloudflare-hosted fronten
 - Serde
 - Serde JSON
 - Tower HTTP
-- Utoipa / Swagger UI
-- JSON Web Token authentication
-- Custom in-memory API rate limiting
+- Utoipa-generated OpenAPI schema
+- Validated JSON Web Token authentication
+- Argon2id admin-password verification
+- Bounded in-memory API rate limiting
 - Hugging Face Space Docker runtime
 
 ### Frontend
@@ -131,7 +128,7 @@ The Hugging Face Space keeps the backend public so the Cloudflare-hosted fronten
 - Vite
 - CSS
 - Responsive UI design
-- Cloudflare Pages static hosting
+- Axum static serving with optional Cloudflare Pages hosting
 
 ### Chatbot
 
@@ -145,7 +142,7 @@ The Hugging Face Space keeps the backend public so the Cloudflare-hosted fronten
 
 - JSON profile data
 - Local `./data` fallback for development
-- Hugging Face Storage Bucket mounted at `/data` in production
+- Hugging Face Space persistent storage at `/data`, when provisioned
 - Media folders for uploaded images and videos
 
 ---
@@ -159,11 +156,13 @@ portfolio/
 │   └── src/
 │       ├── admin.rs
 │       ├── auth.rs
+│       ├── error.rs
 │       ├── media.rs
 │       ├── portfolio_bot.rs
 │       ├── profile.rs
 │       ├── rate_limit.rs
 │       ├── routes.rs
+│       ├── state.rs
 │       └── storage.rs
 ├── frontend/
 │   ├── public/
@@ -233,7 +232,7 @@ Admin capabilities include:
 
 The admin panel is not linked from the public portfolio UI. It is available through a private route and protected with authentication.
 
-Admin sessions expire after one hour.
+Admin sessions expire after the configured 5-60 minute lifetime; the default is one hour.
 
 ---
 
@@ -264,6 +263,7 @@ Main public API routes:
 
 ```text
 GET  /health
+GET  /health/ready
 GET  /api/profile
 POST /api/chat
 ```
@@ -278,10 +278,12 @@ PUT  /api/admin/profile
 POST /api/admin/media/upload
 ```
 
-Swagger UI:
+`GET /api/profile` returns an `ETag` and supports `If-None-Match`. Admin profile reads also return an `ETag`; API clients should send it in `If-Match` when updating to prevent a stale editor from overwriting a newer change.
+
+Interactive Swagger UI is intentionally not bundled. The OpenAPI JSON document is available only when `ENABLE_API_DOCS=true`:
 
 ```text
-/swagger-ui
+GET /api-docs/openapi.json
 ```
 
 ---
@@ -292,29 +294,34 @@ This project includes security hardening for a public portfolio deployment.
 
 Backend protections include:
 
-- Restricted CORS allowed origins
-- Request body size limit
-- Protected admin routes
-- Bearer token authentication
-- One-hour admin session expiry
-- Admin session secret validation
-- Media upload type validation
-- Media upload size limit
-- API rate limiting for chat, admin login, and protected admin routes
-- Backend-only secret handling
+- Strict startup validation for authentication and storage configuration; the documented password and session-secret placeholders are deliberately rejected
+- Restricted CORS origins with exact origin values
+- Route-specific body limits, request timeouts, and concurrency limits, including a four-request login concurrency cap and a 1 MiB total serialized-profile limit
+- Protected admin routes with non-cacheable responses
+- HS256 bearer tokens bound to issuer, audience, subject, type, version, issue time, not-before time, expiry, and unique token ID
+- Five-minute to one-hour configurable admin sessions; increasing `ADMIN_SESSION_VERSION` revokes existing tokens
+- Preferred bounded Argon2id v19 password hashes, with constant-time plaintext verification retained only for compatibility
+- Bounded per-client and global limits for chat, login, and protected admin APIs, including `Retry-After`
+- Proxy IP headers ignored by default and only one explicitly configured header trusted when enabled
+- Exactly one upload per request; filenames are randomized, and file extension, declared MIME type, and byte signature must all match
+- 25 MiB per-file upload limit, bounded total media quota, staging outside the public media tree, interrupted-staging cleanup at startup, and atomic publish
+- Validated profile payloads, cached reads, serialized writes, ETag conflict protection, atomic replacement, and last-known-good recovery
+- Stable JSON API errors that do not expose internal error details
+- Request IDs, structured HTTP tracing, graceful shutdown, and explicit JSON `404` responses for unknown API routes
+- `nosniff`, referrer, permissions, and restrictive public-media response headers
 
 Frontend protections include:
 
-- Cloudflare Pages security headers
+- Static-host security headers when the optional Cloudflare Pages deployment is used
 - Content Security Policy
-- Frame blocking
+- Frame policy matched to the host: the integrated Space build permits only self/Hugging Face ancestors so the Space can render normally, while the optional standalone Cloudflare build blocks framing
 - Referrer policy
 - Browser permission restrictions
 - SPA redirect support
 - Friendly API error handling
 - Friendly rate-limit response handling
 
-Secrets must never be committed to GitHub or exposed in frontend code.
+Secrets must never be committed to GitHub or exposed in frontend code. The `/media` tree is intentionally public: upload only portfolio assets, never private documents, credentials, or media containing sensitive metadata. Remove EXIF or other embedded metadata before upload when confidentiality matters.
 
 ---
 
@@ -324,22 +331,44 @@ Create a `.env` file for local development if needed.
 
 ```env
 PORT=7860
+RUST_LOG=backend=info,tower_http=info
 
 ADMIN_EMAIL=your_admin_email
-ADMIN_PASSWORD=your_admin_password
+# Preferred: a valid Argon2id PHC string. Leave ADMIN_PASSWORD unset when this is used.
+ADMIN_PASSWORD_HASH=$argon2id$...
+# Compatibility fallback only; minimum 12 bytes and rejected if weak or email-derived.
+# ADMIN_PASSWORD=replace_with_a_strong_password
 ADMIN_SESSION_SECRET=minimum_32_characters_long_secret_value
+ADMIN_SESSION_ISSUER=portfolio-backend
+ADMIN_SESSION_AUDIENCE=portfolio-admin
+ADMIN_SESSION_VERSION=1
+ADMIN_SESSION_SECONDS=3600
 
-PORTFOLIO_PROFILE_JSON=optional_profile_json_seed
 ALLOWED_ORIGINS=http://localhost:5173,http://localhost:7860
+TRUST_PROXY_HEADERS=false
+TRUSTED_PROXY_HEADER=x-forwarded-for
+
+PORTFOLIO_DATA_DIR=./data
+PORTFOLIO_PROFILE_JSON=
+MAX_MEDIA_STORAGE_BYTES=536870912
+ENABLE_API_DOCS=false
 ```
 
 Do not commit real secrets to GitHub.
 
 Notes:
 
-- `ADMIN_SESSION_SECRET` must be at least 32 characters.
-- `PORTFOLIO_PROFILE_JSON` is optional.
-- `ALLOWED_ORIGINS` is optional.
+- The placeholder values shown in `.env.example` are documentation only and intentionally make startup fail until replaced.
+- `ADMIN_PASSWORD_HASH` must be an Argon2id v19 PHC string. Accepted bounds are 19,456-65,536 KiB memory, 2-4 iterations, parallelism 1-4, a 16-64 byte output, and at most 256 MiB of memory-times-iterations work. Generate it with a trusted Argon2id tool and keep the plaintext password out of shell history and source control.
+- `ADMIN_PASSWORD` is a temporary compatibility fallback only. Do not configure both password forms.
+- `ADMIN_SESSION_SECRET` must be a unique value between 32 and 4096 bytes. `ADMIN_SESSION_SECONDS` must be between `300` and `3600`.
+- Change `ADMIN_SESSION_VERSION` to invalidate all previously issued admin tokens.
+- `ALLOWED_ORIGINS` is a comma-separated exact allowlist. Do not use `*` for the admin API.
+- Keep `TRUST_PROXY_HEADERS=false` unless requests can reach the application only through a trusted reverse proxy. When enabled, `TRUSTED_PROXY_HEADER` must be exactly `x-forwarded-for`, `cf-connecting-ip`, or `x-real-ip`; choose the header set by that proxy.
+- `PORTFOLIO_DATA_DIR` explicitly selects the persistent storage root. Without it, the backend uses `/data` when present and `./data` otherwise.
+- `MAX_MEDIA_STORAGE_BYTES` must be between 25 MiB and 10 GiB; the default is 512 MiB.
+- `PORTFOLIO_PROFILE_JSON` is an optional first-start seed, not a live database.
+- Keep `ENABLE_API_DOCS=false` in production unless the schema is intentionally exposed.
 - `HF_API_TOKEN` and `HF_MODEL_ID` are not required for the local H7 Assistant.
 - Secret values must stay in `.env`, Hugging Face Space secrets, GitHub secrets, or hosting platform secret managers.
 
@@ -347,7 +376,9 @@ Notes:
 
 ## Storage Flow
 
-The backend uses a storage root helper.
+The backend loads and validates the profile once at startup, keeps an in-memory read snapshot, and serializes updates through a single write path. Each successful update is synced to a unique temporary file and atomically promoted. The previous valid profile is retained as `portfolio_profile.backup.json`; a corrupt primary file is restored from that last-known-good backup at startup.
+
+Set the storage root explicitly with `PORTFOLIO_DATA_DIR`. A profile is limited to 1 MiB after serialization. The automatic filesystem fallback is:
 
 In production on Hugging Face Spaces:
 
@@ -361,15 +392,13 @@ In local development:
 ./data
 ```
 
-The production Hugging Face Space uses a mounted Storage Bucket:
+For durable writes on Hugging Face Spaces, provision persistent Space storage and use:
 
 ```text
-Bucket: hashan-7/ai-portfolio-assets
-Mount path: /data
-Access: Read & Write
+PORTFOLIO_DATA_DIR=/data
 ```
 
-This allows profile JSON and uploaded media files to persist beyond normal Space restarts.
+The backend reads and writes a normal filesystem; it does not connect to Hugging Face Storage Buckets through the S3 API. A Storage Bucket is suitable only if the deployment separately mounts or synchronizes it into the configured directory. Free/ephemeral Space files can disappear after a restart or rebuild, so `PORTFOLIO_PROFILE_JSON` can restore an initial profile but cannot preserve later admin edits or uploads. Use persistent Space storage or an externally managed filesystem mount for those writes.
 
 If profile data is not found in storage, the backend can optionally load initial profile data from:
 
@@ -377,11 +406,15 @@ If profile data is not found in storage, the backend can optionally load initial
 PORTFOLIO_PROFILE_JSON
 ```
 
+Uploaded assets are served publicly under `/media`. Visibility flags protect profile metadata and chatbot answers; they do not make an already uploaded media URL private. Upload processing does not strip EXIF or other embedded metadata.
+
 ---
 
 ## Frontend Deployment
 
-The current public frontend is deployed separately on Cloudflare Pages.
+The default Docker build compiles `frontend/` and copies `frontend/dist` into the final image. Axum serves the SPA and API together, so no separate frontend host or cross-origin API URL is required.
+
+Cloudflare Pages is still supported as an optional split deployment:
 
 Recommended Cloudflare Pages settings:
 
@@ -392,7 +425,7 @@ Build command: npm run build
 Build output directory: dist
 ```
 
-Required production environment variable:
+Required variable only for the optional split deployment:
 
 ```text
 VITE_API_BASE_URL=https://hashan-7-chamira-hashan.hf.space
@@ -417,16 +450,17 @@ frontend/public/_headers
 
 ## Backend Deployment
 
-The backend is deployed on Hugging Face Spaces using Docker.
+The full application is deployed on Hugging Face Spaces using Docker. The multi-stage image uses pinned Node and Rust toolchains, cached dependency layers, a small Debian runtime, and a non-root runtime user.
 
 The backend server handles:
 
 - API routes
 - Admin routes
+- Compiled React SPA and client-side route fallback
 - Media files
-- Swagger UI
+- Optional OpenAPI JSON
 - JSON profile storage access
-- Hugging Face Storage Bucket access through `/data`
+- Persistent storage access through `/data`
 
 The backend listens on the configured `PORT`.
 
@@ -438,15 +472,19 @@ The Hugging Face Space should keep these secrets configured:
 
 ```text
 ADMIN_EMAIL
-ADMIN_PASSWORD
+ADMIN_PASSWORD_HASH
 ADMIN_SESSION_SECRET
 ```
 
-The Hugging Face Space should keep the Storage Bucket mounted at:
+Keep `ADMIN_PASSWORD` only when temporarily using the compatibility path. Configure session claims, allowed origins, storage, and proxy trust from `.env.example`. Enable forwarded-header trust only after confirming which header the deployment edge sets; never enable it when clients can bypass that proxy.
+
+When persistent Space storage is provisioned, configure the backend filesystem root as:
 
 ```text
 /data
 ```
+
+`.github/workflows/deploy.yml` gates deployment on Rust formatting/tests/Clippy/audit, a high-severity production npm audit, the frontend build, and the production container build. Frontend lint remains visible but nonblocking because this release intentionally leaves the existing frontend source untouched. Pushes to `main` deploy a clean source snapshot without repository history. Store `HF_TOKEN` as a GitHub Actions secret; it is a deployment credential, not a frontend or Space runtime variable.
 
 ---
 
@@ -456,7 +494,7 @@ The Hugging Face Space should keep the Storage Bucket mounted at:
 
 ```bash
 cd frontend
-npm install
+npm ci
 ```
 
 ### 2. Build frontend
@@ -483,12 +521,13 @@ Health check:
 
 ```text
 http://localhost:7860/health
+http://localhost:7860/health/ready
 ```
 
-Swagger UI:
+Optional OpenAPI JSON after setting `ENABLE_API_DOCS=true`:
 
 ```text
-http://localhost:7860/swagger-ui
+http://localhost:7860/api-docs/openapi.json
 ```
 
 Admin panel:
@@ -504,17 +543,27 @@ http://localhost:7860/h7-admin
 Before committing major changes, run:
 
 ```bash
-cargo fmt
-cargo check -p backend
-cd frontend
-npm run build
+cargo fmt --all -- --check
+cargo test --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
 ```
 
-Then return to the root directory and run:
+Then verify the frontend and production image:
 
 ```bash
+cd frontend
+npm ci --no-audit --no-fund
+npm audit --omit=dev --audit-level=high
+npm run lint || true
+npm run build
 cd ..
-cargo run -p backend
+docker build --pull --tag portfolio-backend:local .
+```
+
+Run the Rust dependency audit when `cargo-audit` is installed:
+
+```bash
+cargo audit
 ```
 
 ---
@@ -573,13 +622,16 @@ Before sharing the portfolio link publicly, confirm:
 - H7 Assistant does not reveal hidden/admin/internal fields
 - Admin route is not visible publicly
 - Admin login works
-- Admin session expires after one hour
+- Admin session expires at the configured lifetime
 - Admin save/update works
 - Media upload works
+- Public profile revalidation returns `304` for a matching `ETag`
+- A stale admin update with `If-Match` is rejected instead of overwriting newer data
 - `/projects` route works after refresh
 - `/h7-admin` route works after refresh
-- Cloudflare Pages deployment succeeds
-- Hugging Face Space backend health check works
+- Hugging Face Docker build and deployment succeed
+- Both `/health` and `/health/ready` succeed
+- Optional Cloudflare Pages deployment succeeds, when used
 - No frontend console errors are shown
 - No broken public links are shown
 - No real secrets are committed
@@ -592,19 +644,22 @@ Before sharing the portfolio link publicly, confirm:
 Before final deployment, confirm:
 
 - `.env` is not committed
-- Admin password is stored only in secrets
+- Admin Argon2id password hash is stored only in secrets
 - Admin session secret is stored only in secrets
-- `ADMIN_SESSION_SECRET` has at least 32 characters
-- CORS allowed origins are restricted
-- Frontend `VITE_API_BASE_URL` points to the backend API
-- Hugging Face Storage Bucket is mounted at `/data`
-- Storage Bucket is not unmounted
+- `ADMIN_SESSION_SECRET` is unique and has at least 32 bytes
+- Session issuer, audience, lifetime, and version are intentional
+- CORS allowed origins are exact and restricted
+- `VITE_API_BASE_URL` is empty for same-origin deployment, or points to the backend only in split deployment
+- Persistent Space storage or another durable filesystem is mounted at `/data`
+- `PORTFOLIO_DATA_DIR=/data` is configured for production
 - Admin route is protected
 - API rate limiting is enabled
+- Proxy headers remain untrusted unless the application is isolated behind the configured proxy
 - Frontend handles `429 Too Many Requests`
-- Frontend security headers are included
-- Cloudflare SSL is enabled
+- Production response security headers are present
+- TLS is enabled on the public domain
 - Public portfolio data is safe to show
+- Public `/media` files contain no confidential content or unwanted embedded metadata
 
 ---
 

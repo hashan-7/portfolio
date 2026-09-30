@@ -1,21 +1,114 @@
-name: Deploy to Hugging Face Space
+name: Verify and deploy to Hugging Face Space
 
 on:
+  pull_request:
+    branches: [main]
   push:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: portfolio-production-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  sync-to-hub:
-    runs-on: ubuntu-latest
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Push to HF Space
+      - name: Install pinned Rust toolchain
+        run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt,clippy
+
+      - name: Select Rust toolchain
+        run: rustup default 1.95.0
+
+      - name: Verify Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run backend tests
+        run: cargo test --workspace --all-targets --locked
+
+      - name: Lint backend without warnings
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Audit Rust dependencies
+        run: |
+          cargo install cargo-audit --version 0.22.2 --locked
+          cargo audit
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+
+      - name: Audit production frontend dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Report frontend lint findings
+        continue-on-error: true
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Verify production container build
+        run: docker build --pull --tag portfolio-backend:ci .
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out verified source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Push a clean source snapshot to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://hashan-7:${HF_TOKEN}@huggingface.co/spaces/hashan-7/chamira-hashan HEAD:main
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${HF_TOKEN}"
+
+          snapshot_dir="$(mktemp -d)"
+          git archive --format=tar HEAD | tar -xf - -C "${snapshot_dir}"
+
+          cd "${snapshot_dir}"
+          git init --initial-branch=main
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add --all
+          git commit -m "Deploy ${GITHUB_SHA}"
+
+          authorization="$(printf 'hashan-7:%s' "${HF_TOKEN}" | base64 -w0)"
+          echo "::add-mask::${authorization}"
+          git -c http.extraHeader="Authorization: Basic ${authorization}" \
+            push --force \
+            https://huggingface.co/spaces/hashan-7/chamira-hashan \
+            HEAD:main
