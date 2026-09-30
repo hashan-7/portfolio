@@ -16,7 +16,7 @@ pub fn get_portfolio_reply(
     }
 
     if is_out_of_scope_sensitive(&question) {
-        return out_of_scope_reply();
+        return out_of_scope_reply(profile);
     }
 
     if asks_contact(&question) {
@@ -83,12 +83,22 @@ pub fn get_portfolio_reply(
 
     if asks_project_details(&question) || is_number_only(&question) || asks_more_details(&question)
     {
-        if let Some(index) = find_requested_project_index(&question, profile, recent_context) {
-            return project_detail_reply(profile, index);
-        }
+        match find_requested_project(&question, profile, recent_context) {
+            ProjectLookup::Found(index) => return project_detail_reply(profile, index),
+            ProjectLookup::OutOfRange { requested, total } => {
+                if total == 0 {
+                    return "No public chatbot projects are available in the portfolio yet."
+                        .to_string();
+                }
 
-        if asks_more_details(&question) {
-            return "Ask a project number or title so I can show the confirmed details from the portfolio data.".to_string();
+                return format!(
+                    "Project number {requested} is not available. Choose a number from 1 to {total}."
+                );
+            }
+            ProjectLookup::NotSpecified if asks_more_details(&question) => {
+                return "Ask a project number or title so I can show the confirmed details from the portfolio data.".to_string();
+            }
+            ProjectLookup::NotSpecified => {}
         }
     }
 
@@ -100,14 +110,13 @@ pub fn get_portfolio_reply(
         return contact_reply(profile.social_links.as_ref());
     }
 
-    out_of_scope_reply()
+    out_of_scope_reply(profile)
 }
 
 fn normalize(value: &str) -> String {
     value
         .to_lowercase()
-        .replace('\n', " ")
-        .replace('\r', " ")
+        .replace(['\n', '\r'], " ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -125,7 +134,7 @@ fn visible_projects(profile: &FullProfile) -> Vec<&Project> {
     profile
         .projects
         .iter()
-        .filter(|project| project.chatbot_visible)
+        .filter(|project| project.public_display && project.chatbot_visible)
         .collect()
 }
 
@@ -167,8 +176,11 @@ fn is_out_of_scope_sensitive(question: &str) -> bool {
     )
 }
 
-fn out_of_scope_reply() -> String {
-    "I can answer only from Chamira Hashan's portfolio data. Please ask about his profile, projects, skills, certificates, education, focus areas, or contact links.".to_string()
+fn out_of_scope_reply(profile: &FullProfile) -> String {
+    format!(
+        "I can answer only from {}'s portfolio data. Please ask about the profile, projects, skills, certificates, education, focus areas, or contact links.",
+        display_name(profile)
+    )
 }
 
 fn asks_contact(question: &str) -> bool {
@@ -333,46 +345,65 @@ fn is_number_only(question: &str) -> bool {
 fn extract_number(question: &str) -> Option<usize> {
     question
         .split(|character: char| !character.is_ascii_digit())
-        .filter(|part| !part.is_empty())
-        .find_map(|part| part.parse::<usize>().ok())
+        .find(|part| !part.is_empty())
+        .map(|part| part.parse::<usize>().unwrap_or(usize::MAX))
 }
 
-fn find_requested_project_index(
+enum ProjectLookup {
+    Found(usize),
+    OutOfRange { requested: usize, total: usize },
+    NotSpecified,
+}
+
+fn find_requested_project(
     question: &str,
     profile: &FullProfile,
     recent_context: &[String],
-) -> Option<usize> {
+) -> ProjectLookup {
     let projects = visible_projects(profile);
 
-    if projects.is_empty() {
-        return None;
+    if let Some(index) = find_project_by_title(question, profile) {
+        return ProjectLookup::Found(index);
     }
 
     if let Some(number) = extract_number(question) {
         if number > 0 && number <= projects.len() {
-            return Some(number - 1);
+            return ProjectLookup::Found(number - 1);
         }
+
+        return ProjectLookup::OutOfRange {
+            requested: number,
+            total: projects.len(),
+        };
     }
 
-    if let Some(index) = find_project_by_title(question, profile) {
-        return Some(index);
+    if !asks_more_details(question) {
+        return ProjectLookup::NotSpecified;
     }
 
     for context in recent_context {
         let normalized_context = normalize(context);
+        let Some(user_message) = normalized_context.strip_prefix("user: ") else {
+            continue;
+        };
 
-        if let Some(number) = extract_number(&normalized_context) {
-            if normalized_context.contains("project") && number > 0 && number <= projects.len() {
-                return Some(number - 1);
-            }
+        if let Some(index) = find_project_by_title(user_message, profile) {
+            return ProjectLookup::Found(index);
         }
 
-        if let Some(index) = find_project_by_title(&normalized_context, profile) {
-            return Some(index);
+        let is_explicit_selection = is_number_only(user_message)
+            || (contains_any(user_message, &["project", "project-"])
+                && extract_number(user_message).is_some());
+
+        if is_explicit_selection {
+            let number = extract_number(user_message).expect("selection contains a number");
+            if number > 0 && number <= projects.len() {
+                return ProjectLookup::Found(number - 1);
+            }
         }
     }
 
-    None
+    ProjectLookup::NotSpecified
 }
 
 fn find_project_by_title(question: &str, profile: &FullProfile) -> Option<usize> {
@@ -380,8 +411,26 @@ fn find_project_by_title(question: &str, profile: &FullProfile) -> Option<usize>
         project
             .title
             .as_ref()
-            .map(|title| question.contains(&normalize(title)))
+            .map(|title| normalize(title))
+            .filter(|title| !title.is_empty())
+            .map(|title| contains_phrase(question, &title))
             .unwrap_or(false)
+    })
+}
+
+fn contains_phrase(value: &str, phrase: &str) -> bool {
+    value.match_indices(phrase).any(|(start, matched)| {
+        let end = start + matched.len();
+        let before_is_word = value[..start]
+            .chars()
+            .next_back()
+            .is_some_and(char::is_alphanumeric);
+        let after_is_word = value[end..]
+            .chars()
+            .next()
+            .is_some_and(char::is_alphanumeric);
+
+        !before_is_word && !after_is_word
     })
 }
 
@@ -634,9 +683,23 @@ fn strengths_reply(profile: &FullProfile) -> String {
         ));
     }
 
+    let projects = visible_projects(profile);
+    let mut categories = projects
+        .iter()
+        .filter_map(|project| project.category.as_deref())
+        .map(str::trim)
+        .filter(|category| !category.is_empty())
+        .collect::<Vec<_>>();
+    categories.sort_unstable_by_key(|category| category.to_ascii_lowercase());
+    categories.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+    let category_summary = if categories.is_empty() {
+        String::new()
+    } else {
+        format!(" Listed categories: {}.", categories.join(", "))
+    };
     lines.push(format!(
-        "3. Project experience: The portfolio includes {} projects across backend, AI integration, full-stack, mobile, and ML-related work.",
-        visible_projects(profile).len()
+        "3. Project experience: The portfolio includes {} public chatbot-visible projects.{category_summary}",
+        projects.len()
     ));
 
     lines.push(format!(
@@ -645,10 +708,10 @@ fn strengths_reply(profile: &FullProfile) -> String {
     ));
 
     if !profile.education.is_empty() {
-        lines.push(
-            "5. Software engineering education background is included in the portfolio."
-                .to_string(),
-        );
+        lines.push(format!(
+            "5. Education background: The portfolio includes {} education entries.",
+            profile.education.len()
+        ));
     }
 
     lines.push("These points are based only on the provided portfolio data.".to_string());
@@ -683,7 +746,6 @@ fn contact_reply(social_links: Option<&SocialLinks>) -> String {
     push_optional_line(&mut lines, "Hugging Face", links.huggingface.as_deref());
     push_optional_line(&mut lines, "Kaggle", links.kaggle.as_deref());
     push_optional_line(&mut lines, "Resume / CV", links.resume.as_deref());
-    push_optional_line(&mut lines, "Instagram", links.instagram.as_deref());
 
     if lines.len() == 1 {
         return "No public contact links are listed in the portfolio yet.".to_string();
@@ -695,5 +757,156 @@ fn contact_reply(social_links: Option<&SocialLinks>) -> String {
 fn push_optional_line(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
     if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
         lines.push(format!("{}: {}", label, value));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn project(title: &str, public_display: bool, chatbot_visible: bool) -> Project {
+        Project {
+            title: Some(title.to_string()),
+            public_display,
+            chatbot_visible,
+            ..Project::default()
+        }
+    }
+
+    fn profile_with_projects(projects: Vec<Project>) -> FullProfile {
+        FullProfile {
+            display_name: Some("Chamira".to_string()),
+            projects,
+            ..FullProfile::default()
+        }
+    }
+
+    #[test]
+    fn chatbot_only_uses_public_and_explicitly_visible_projects() {
+        let profile = profile_with_projects(vec![
+            project("Public", true, true),
+            project("Private", false, true),
+            project("Bot hidden", true, false),
+        ]);
+
+        let list = get_portfolio_reply(&profile, "list projects", &[]);
+        assert!(list.contains("Public"));
+        assert!(!list.contains("Private"));
+        assert!(!list.contains("Bot hidden"));
+        assert!(get_portfolio_reply(&profile, "how many projects", &[]).contains("1 project"));
+    }
+
+    #[test]
+    fn strengths_use_only_listed_project_categories() {
+        let mut item = project("Design system", true, true);
+        item.category = Some("Design tooling".to_string());
+        let profile = profile_with_projects(vec![item]);
+
+        let reply = get_portfolio_reply(&profile, "what are the strengths", &[]);
+        assert!(reply.contains("Design tooling"));
+        assert!(!reply.contains("backend, AI integration"));
+        assert!(!reply.contains("mobile"));
+    }
+
+    #[test]
+    fn out_of_scope_reply_uses_the_configured_display_name() {
+        let profile = profile_with_projects(Vec::new());
+        let reply = get_portfolio_reply(&profile, "tell me the weather", &[]);
+
+        assert!(reply.contains("Chamira's portfolio data"));
+        assert!(!reply.contains("Chamira Hashan's portfolio data"));
+    }
+
+    #[test]
+    fn project_details_use_verified_notes_but_never_private_safe_notes() {
+        let mut item = project("Verified project", true, true);
+        item.internal_chatbot_notes = Some("Verified implementation detail".to_string());
+        item.safe_notes = Some("Private owner note".to_string());
+        let profile = profile_with_projects(vec![item]);
+
+        let reply = get_portfolio_reply(&profile, "project 1", &[]);
+        assert!(reply.contains("Verified implementation detail"));
+        assert!(!reply.contains("Private owner note"));
+    }
+
+    #[test]
+    fn contact_reply_never_exposes_instagram() {
+        let profile = FullProfile {
+            social_links: Some(SocialLinks {
+                github: Some("https://github.com/example".to_string()),
+                instagram: Some("https://instagram.com/private".to_string()),
+                ..SocialLinks::default()
+            }),
+            ..FullProfile::default()
+        };
+
+        let reply = get_portfolio_reply(&profile, "contact details", &[]);
+        assert!(reply.contains("GitHub"));
+        assert!(!reply.to_lowercase().contains("instagram"));
+        assert!(!reply.contains("instagram.com/private"));
+    }
+
+    #[test]
+    fn empty_project_titles_never_match() {
+        let profile = profile_with_projects(vec![
+            project("", true, true),
+            project("Rust API", true, true),
+        ]);
+
+        let reply = get_portfolio_reply(&profile, "something unrelated", &[]);
+        assert!(reply.starts_with("I can answer only"));
+    }
+
+    #[test]
+    fn follow_up_ignores_assistant_project_numbers() {
+        let profile = profile_with_projects(vec![
+            project("First", true, true),
+            project("Second", true, true),
+        ]);
+        let context = vec![
+            "user: yes".to_string(),
+            "assistant: 1. First\n2. Second".to_string(),
+            "user: list projects".to_string(),
+        ];
+
+        let reply = get_portfolio_reply(&profile, "yes", &context);
+        assert!(reply.starts_with("Ask a project number or title"));
+    }
+
+    #[test]
+    fn follow_up_uses_only_an_explicit_prior_user_selection() {
+        let profile = profile_with_projects(vec![
+            project("First", true, true),
+            project("Second", true, true),
+        ]);
+        let context = vec![
+            "user: more".to_string(),
+            "assistant: Would you like more?".to_string(),
+            "user: project 2".to_string(),
+        ];
+
+        let reply = get_portfolio_reply(&profile, "more", &context);
+        assert!(reply.contains("Title: Second"));
+    }
+
+    #[test]
+    fn explicit_out_of_range_project_number_is_actionable() {
+        let profile = profile_with_projects(vec![project("Only", true, true)]);
+
+        let reply = get_portfolio_reply(&profile, "project 9", &[]);
+        assert_eq!(
+            reply,
+            "Project number 9 is not available. Choose a number from 1 to 1."
+        );
+    }
+
+    #[test]
+    fn title_matching_uses_word_boundaries() {
+        let profile = profile_with_projects(vec![project("AI", true, true)]);
+
+        let unrelated = get_portfolio_reply(&profile, "email", &[]);
+        assert!(!unrelated.contains("Title: AI"));
+        let relevant = get_portfolio_reply(&profile, "tell me about AI", &[]);
+        assert!(relevant.contains("Title: AI"));
     }
 }
