@@ -96,6 +96,8 @@ jobs:
           set -euo pipefail
           test -n "${HF_TOKEN}"
 
+          commit_message="$(git log -1 --pretty=%B)"
+
           snapshot_dir="$(mktemp -d)"
           git archive --format=tar HEAD | tar -xf - -C "${snapshot_dir}"
 
@@ -104,7 +106,7 @@ jobs:
           git config user.name "Chamira Hashan"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add --all
-          git commit -m "Deploy ${GITHUB_SHA}"
+          git commit -m "${commit_message}"
 
           authorization="$(printf 'hashan-7:%s' "${HF_TOKEN}" | base64 -w0)"
           echo "::add-mask::${authorization}"
