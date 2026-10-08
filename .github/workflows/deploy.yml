@@ -104,7 +104,7 @@ jobs:
           cd "${snapshot_dir}"
           git init --initial-branch=main
           git config user.name "Chamira Hashan"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.email "hashan-7@users.noreply.huggingface.co"
           git add --all
           git commit -m "${commit_message}"
 
