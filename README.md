@@ -230,7 +230,7 @@ Admin capabilities include:
 - Save changes to JSON profile storage
 - Upload project images and videos
 
-The admin panel is not linked from the public portfolio UI. It is available through a private route and protected with authentication.
+The admin panel is not linked from the public portfolio UI. Access is protected with authentication.
 
 Admin sessions expire after the configured 5-60 minute lifetime; the default is one hour.
 
@@ -268,15 +268,7 @@ GET  /api/profile
 POST /api/chat
 ```
 
-Main protected admin API routes:
-
-```text
-POST /api/admin/login
-GET  /api/admin/verify
-GET  /api/admin/profile
-PUT  /api/admin/profile
-POST /api/admin/media/upload
-```
+Administration APIs support sign-in, session verification, profile reads and updates, and media uploads. Profile management and media upload operations require authentication.
 
 `GET /api/profile` returns an `ETag` and supports `If-None-Match`. Admin profile reads also return an `ETag`; API clients should send it in `If-Match` when updating to prevent a stale editor from overwriting a newer change.
 
@@ -530,12 +522,6 @@ Optional OpenAPI JSON after setting `ENABLE_API_DOCS=true`:
 http://localhost:7860/api-docs/openapi.json
 ```
 
-Admin panel:
-
-```text
-http://localhost:7860/h7-admin
-```
-
 ---
 
 ## Build Checks
@@ -620,7 +606,7 @@ Before sharing the portfolio link publicly, confirm:
 - H7 Assistant opens and closes correctly
 - H7 Assistant answers from local portfolio data
 - H7 Assistant does not reveal hidden/admin/internal fields
-- Admin route is not visible publicly
+- Public portfolio navigation does not link to the admin panel
 - Admin login works
 - Admin session expires at the configured lifetime
 - Admin save/update works
@@ -628,7 +614,7 @@ Before sharing the portfolio link publicly, confirm:
 - Public profile revalidation returns `304` for a matching `ETag`
 - A stale admin update with `If-Match` is rejected instead of overwriting newer data
 - `/projects` route works after refresh
-- `/h7-admin` route works after refresh
+- Admin panel loads correctly after refresh
 - Hugging Face Docker build and deployment succeed
 - Both `/health` and `/health/ready` succeed
 - Optional Cloudflare Pages deployment succeeds, when used
